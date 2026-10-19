@@ -600,10 +600,8 @@ export default function QCReport() {
                 </table>
               </div>
             </div>
-
           </div>
         </div>
-
       </div>
     </div>
   );
