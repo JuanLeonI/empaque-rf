@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, Printer, Trash2, Edit3, PlusCircle, LogOut, RefreshCcw, Thermometer, ClipboardList, AlertTriangle, Layers, Maximize2 } from 'lucide-react';
+import { ShieldCheck, Printer, Trash2, Edit3, PlusCircle, LogOut, RefreshCcw, Thermometer, ClipboardList, Layers, Maximize2, Users, Search } from 'lucide-react';
 import ReporteModal from './ReporteModal';
 
 interface Inspeccion {
@@ -16,6 +16,7 @@ interface Inspeccion {
   etapa: string;
   cuadro: string;
   empaque: string;
+  tipo_bolsa?: string;
   con_etiqueta: boolean;
   tamano_resumen: string;
   temperatura?: number | string;
@@ -24,13 +25,19 @@ interface Inspeccion {
   peso: number;
   peso_unidad: string;
   calidad: string;
+  calidad_global?: string;
   defecto: string;
   categoria_defecto: string;
   piezas_defecto: number;
   porcentaje_defecto: number;
+  porcentaje_general?: number;
+  porcentaje_primera?: number;
+  porcentaje_segunda?: number;
+  porcentaje_rezaga?: number;
   empacador_num: number;
   empacador_nombre: string;
   total_muestras: number;
+  desglose_defectos?: Array<{ tipo: string; clasificacion: string; piezas: number }>;
 }
 
 interface Temperatura {
@@ -66,27 +73,19 @@ const CAT_EMPACADORES: Record<number, string> = {
   19: "ANDDY GUERRERA"
 };
 
-const DEFECTOS_SEGUNDA = [
-  "NINGUNO", "LACRADO", "LACRADO #2", "COLOR BAJO CACHETEADO", "COLOR BAJO", 
-  "DEFORME", "DAÑO X PROTUBERANCIA", "GOLPE #2", "DAÑO X HOJA", "PITTING #2", 
-  "BAJO DIAMETRO", "BAJO COLOR", "FLOR EN FRUTA", "CURBO", "VIROSIS"
-];
-
-const DEFECTOS_REZAGA = [
-  "NINGUNO", "PITTING", "AMARILLO CACHETEADO", "MALFORMACION", "LACRADO", 
-  "DAÑO MECANICO", "DAÑO X PECIOLO", "DESHIDRATACION", "DEFORME", "PASADA", 
-  "CUCHILLO", "PUDRICION", "DAÑO X PLAGA"
-];
+const DEFECTOS_POR_CLASIFICACION: Record<string, string[]> = {
+  "Primera": ["NINGUNO", "BUENA CALIDAD", "LEVE MANCHA", "COLOR UNIFORME", "LACRADO", "GOLPE", "PITTING", "DAÑO X HOJA", "DEFORME", "OTRO"],
+  "Segunda": ["NINGUNO", "LACRADO #2", "COLOR BAJO CACHETEADO", "COLOR BAJO", "DEFORME", "DAÑO X PROTUBERANCIA", "GOLPE #2", "DAÑO X HOJA", "PITTING #2", "BAJO DIAMETRO", "BAJO COLOR", "FLOR EN FRUTA", "CURBO", "VIROSIS", "OTRO"],
+  "Rezaga": ["NINGUNO", "LACRADO (REZAGA)", "PITTING (REZAGA)", "AMARILLO CACHETEADO", "MALFORMACION", "DAÑO MECANICO", "DAÑO X PECIOLO", "DESHIDRATACION", "DEFORME", "PASADA", "CUCHILLO", "PUDRICION", "DAÑO X PLAGA", "OTRO"]
+};
 
 const TAMAÑOS_POR_PRODUCTO: Record<string, string[]> = {
   "Zucchini": ["X.FANCY", "FANCY", "MEDIUM", "LARGE", "X.LARGE"],
   "Calabaza Amarilla": ["X.FANCY", "FANCY", "MEDIUM", "LARGE", "MENOR A XF"],
   "Pepino": ["42", "36", "30", "24", "MENOR A 42"],
-  "Butternut": ["STANDARD", "GRANEL"],
-  "Espagueti": ["STANDARD", "GRANEL"],
-  "Delicata": ["STANDARD", "GRANEL"],
-  "Acorn": ["STANDARD", "GRANEL"],
-  "Kabocha": ["STANDARD", "GRANEL"]
+  "Sandía": ["AGUSTIN", "GRANEL", "STANDARD"],
+  "Sandía Mini": ["MINI 5", "MINI 6", "MINI 8"],
+  "Berenjena": ["FANCY", "CHOICE", "JUMBO"]
 };
 
 const CATALOGO_PRODUCTOS: Record<string, {
@@ -97,83 +96,57 @@ const CATALOGO_PRODUCTOS: Record<string, {
 }> = {
   "Zucchini": {
     categoria: "Frescas",
-    variedades: ["Alessandra"],
+    variedades: ["Alessandra", "Monarca", "Züc-Elite"],
     etapas: [
-      { nombre: "Etapa 1", cuadros: ["9-4", "9-5", "9-6", "9-7", "9-8"] },
-      { nombre: "Etapa 2", cuadros: ["4", "5", "3-4", "3-5", "3-6"] },
+      { nombre: "Etapa 1", cuadros: ["9-4", "9-5", "9-6", "9-7", "9-8", "9-3"] },
+      { nombre: "Etapa 2", cuadros: ["4", "5", "3-4", "3-5", "3-6", "3-3"] },
       { nombre: "Etapa 3", cuadros: ["12-5", "12-6", "12-7", "12-8", "12-4"] }
     ],
     empaques: ["Rico Farms", "Sonoran Gold"]
   },
   "Calabaza Amarilla": {
     categoria: "Frescas",
-    variedades: ["Grand Price"],
+    variedades: ["Grand Priz", "Multipack"],
     etapas: [
       { nombre: "Etapa 1", cuadros: ["9-1", "9-2"] },
-      { nombre: "Etapa 2", cuadros: ["3-1", "3-2", "6-3-1"] },
+      { nombre: "Etapa 2", cuadros: ["3-1", "3-2", "6"] },
       { nombre: "Etapa 3", cuadros: ["12-1", "12-2"] }
     ],
     empaques: ["Rico Farms", "Sonoran Gold"]
   },
   "Pepino": {
     categoria: "Frescas",
-    variedades: ["Azulán"],
+    variedades: ["Azulan", "Hércules"],
     etapas: [
       { nombre: "Etapa 1", cuadros: ["8-1", "8-2", "8-3", "8-4", "8-5", "8-6"] },
       { nombre: "Etapa 2", cuadros: ["8-7", "8-8", "8-9"] }
     ],
     empaques: ["Rico Farms"]
   },
-  "Butternut": {
-    categoria: "Duras",
-    variedades: ["Quantum"],
+  "Sandía": {
+    categoria: "Frescas",
+    variedades: ["Crimson Sweet", "Seedless"],
     etapas: [
-      { nombre: "Etapa 1", cuadros: ["11-4", "11-5", "11-6", "11-7", "11-8", "11-9", "11-13"] }, 
-      { nombre: "Etapa 2", cuadros: ["2-4", "2-5"] }, 
-      { nombre: "Etapa 3", cuadros: ["2-6", "2-7", "2-8"] }
+      { nombre: "Etapa 1", cuadros: ["S-1", "S-2"] },
+      { nombre: "Etapa 2", cuadros: ["S-3", "S-4"] }
     ],
-    empaques: ["Rico Farms / Duras"]
+    empaques: ["Rico Farms", "Sonoran Gold"]
   },
-  "Espagueti": {
-    categoria: "Duras",
-    variedades: ["Vegetal"],
+  "Sandía Mini": {
+    categoria: "Frescas",
+    variedades: ["Mini Love", "Extrema"],
     etapas: [
-      { nombre: "Etapa 1", cuadros: ["11-10", "11-11", "11-12"] }, 
-      { nombre: "Etapa 2", cuadros: ["15-3"] }, 
-      { nombre: "Etapa 3", cuadros: ["2-9"] }, 
-      { nombre: "Etapa 4", cuadros: ["3-8", "3-9"] }
+      { nombre: "Etapa 1", cuadros: ["SM-1", "SM-2"] }
     ],
-    empaques: ["Rico Farms / Duras"]
+    empaques: ["Rico Farms", "Sonoran Gold"]
   },
-  "Delicata": {
-    categoria: "Duras",
-    variedades: ["Jounin"],
+  "Berenjena": {
+    categoria: "Frescas",
+    variedades: ["Classic", "Noche Oscura"],
     etapas: [
-      { nombre: "Etapa 1", cuadros: ["11-1", "11-2"] }, 
-      { nombre: "Etapa 2", cuadros: ["2-1"] }, 
-      { nombre: "Etapa 3", cuadros: ["3-7"] }
+      { nombre: "Etapa 1", cuadros: ["B-1", "B-2"] }
     ],
-    empaques: ["Rico Farms / Duras"]
-  },
-  "Acorn": {
-    categoria: "Duras",
-    variedades: ["Autumn"],
-    etapas: [
-      { nombre: "Etapa 1", cuadros: ["2-2", "2-3"] }, 
-      { nombre: "Etapa 2", cuadros: ["12-3"] }, 
-      { nombre: "Etapa 3", cuadros: ["14-1"] }
-    ],
-    empaques: ["Rico Farms / Duras"]
-  },
-  "Kabocha": {
-    categoria: "Duras",
-    variedades: ["T-151"],
-    etapas: [
-      { nombre: "Etapa 1", cuadros: ["11-3", "2-10"] }, 
-      { nombre: "Etapa 2", cuadros: ["14-1"] }, 
-      { nombre: "Etapa 3", cuadros: ["3-10"] }
-    ],
-    empaques: ["Rico Farms / Duras"]
+    empaques: ["Rico Farms"]
   }
 };
 
@@ -181,8 +154,18 @@ export default function AdminPage() {
   const router = useRouter();
   const [inspecciones, setInspecciones] = useState<Inspeccion[]>([]);
   const [temperaturas, setTemperaturas] = useState<Temperatura[]>([]);
-  const [activeTab, setActiveTab] = useState<'inspecciones' | 'temperaturas'>('inspecciones');
+  const [activeTab, setActiveTab] = useState<'inspecciones' | 'temperaturas' | 'trabajadores'>('inspecciones');
   const [loading, setLoading] = useState(true);
+
+  // Estados seguros para evitar el error 'unstable value new Date()' en Next.js
+  const [filtroFecha, setFiltroFecha] = useState('');
+  const [filtroInspector, setFiltroInspector] = useState('TODOS');
+  const [filtroVariedad, setFiltroVariedad] = useState('TODAS');
+  const [soloHoy, setSoloHoy] = useState(false);
+  const [fechaHoyStr, setFechaHoyStr] = useState('');
+
+  // Estado dedicado para el módulo de Búsqueda de Trabajadores
+  const [busquedaTrabajadorId, setBusquedaTrabajadorId] = useState('');
 
   const [notificacion, setNotificacion] = useState<{ tipo: 'exito' | 'error'; mensaje: string } | null>(null);
 
@@ -219,17 +202,18 @@ export default function AdminPage() {
     etapaSeleccionada: configDefault.etapas[0].nombre,
     cuadroSeleccionado: configDefault.etapas[0].cuadros[0],
     empaque: configDefault.empaques[0],
+    tipo_bolsa_opcion: 'Sin Bolsa (S/B)',
+    tipo_bolsa_detalle: '',
     con_etiqueta: true,
     temperatura: 6.2,
     peso: 22.87,
     peso_unidad: 'lb',
-    calidad: 'Primera',
-    defecto_segunda: 'NINGUNO',
-    piezas_segunda: 0,
-    defecto_rezaga: 'NINGUNO',
-    piezas_rezaga: 0,
+    calidad_global: 'Primera (Limpia)',
     total_muestras: 0,
-    porcentaje_defecto: 0,
+    porcentaje_general: 100,
+    porcentaje_primera: 0,
+    porcentaje_segunda: 0,
+    porcentaje_rezaga: 0,
     empacador_num: 5,
     empacador_nombre: CAT_EMPACADORES[5]
   });
@@ -237,6 +221,35 @@ export default function AdminPage() {
   const [tamanosPz, setTamanosPz] = useState<Record<string, number>>({
     "X.FANCY": 0, "FANCY": 0, "MEDIUM": 0, "LARGE": 0, "X.LARGE": 0
   });
+
+  const [defectosLista, setDefectosLista] = useState<Array<{ tipo: string; clasificacion: string; piezas: number }>>([]);
+  const [nuevoDefecto, setNuevoDefecto] = useState({
+    clasificacion: 'Segunda',
+    tipo: DEFECTOS_POR_CLASIFICACION['Segunda'][0],
+    tipoPersonalizado: '',
+    piezas: 1
+  });
+
+  const recalcularPorcentajes = useCallback((muestrasTotales: number, defectos: typeof defectosLista) => {
+    if (muestrasTotales <= 0) {
+      return { pGeneral: 100, pPrimera: 0, pSegunda: 0, pRezaga: 0, pDefectoTotal: 0 };
+    }
+
+    const pzPrimeraDef = defectos.filter(d => d.clasificacion === 'Primera').reduce((acc, curr) => acc + curr.piezas, 0);
+    const pzSegunda = defectos.filter(d => d.clasificacion === 'Segunda').reduce((acc, curr) => acc + curr.piezas, 0);
+    const pzRezaga = defectos.filter(d => d.clasificacion === 'Rezaga').reduce((acc, curr) => acc + curr.piezas, 0);
+
+    const totalDefectosOClasificados = pzPrimeraDef + pzSegunda + pzRezaga;
+    const pzLimpiasRestantes = Math.max(0, muestrasTotales - totalDefectosOClasificados);
+
+    const pGeneral = Number(((pzLimpiasRestantes / muestrasTotales) * 100).toFixed(2));
+    const pPrimera = Number(((pzPrimeraDef / muestrasTotales) * 100).toFixed(2));
+    const pSegunda = Number(((pzSegunda / muestrasTotales) * 100).toFixed(2));
+    const pRezaga = Number(((pzRezaga / muestrasTotales) * 100).toFixed(2));
+    const pDefectoTotal = Number((pSegunda + pRezaga).toFixed(2));
+
+    return { pGeneral, pPrimera, pSegunda, pRezaga, pDefectoTotal };
+  }, []);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -259,9 +272,13 @@ export default function AdminPage() {
 
   useEffect(() => {
     const hoy = new Date();
+    const hoyFormatted = hoy.toISOString().split('T')[0];
+    setFechaHoyStr(hoyFormatted);
+    setFiltroFecha(hoyFormatted);
+
     setFormInsp(prev => ({
       ...prev,
-      fecha: hoy.toISOString().split('T')[0],
+      fecha: hoyFormatted,
       hora: hoy.toTimeString().split(' ')[0].substring(0, 5)
     }));
     fetchData();
@@ -278,6 +295,7 @@ export default function AdminPage() {
       nuevoTamanosObj[t] = 0;
     });
     setTamanosPz(nuevoTamanosObj);
+    setDefectosLista([]);
 
     setFormInsp(prev => ({
       ...prev,
@@ -287,7 +305,11 @@ export default function AdminPage() {
       etapaSeleccionada: primeraEtapa.nombre,
       cuadroSeleccionado: primeraEtapa.cuadros[0],
       empaque: config.empaques[0],
-      total_muestras: 0
+      total_muestras: 0,
+      porcentaje_general: 100,
+      porcentaje_primera: 0,
+      porcentaje_segunda: 0,
+      porcentaje_rezaga: 0
     }));
   };
 
@@ -296,10 +318,15 @@ export default function AdminPage() {
     setTamanosPz(actualizados);
 
     const sumaTotal = Object.values(actualizados).reduce((a, b) => a + b, 0);
+    const { pGeneral, pPrimera, pSegunda, pRezaga } = recalcularPorcentajes(sumaTotal, defectosLista);
+
     setFormInsp(prev => ({
       ...prev,
       total_muestras: sumaTotal,
-      porcentaje_defecto: sumaTotal > 0 ? Number((((Number(prev.piezas_segunda) + Number(prev.piezas_rezaga)) / sumaTotal) * 100).toFixed(2)) : 0
+      porcentaje_general: pGeneral,
+      porcentaje_primera: pPrimera,
+      porcentaje_segunda: pSegunda,
+      porcentaje_rezaga: pRezaga
     }));
   };
 
@@ -325,41 +352,96 @@ export default function AdminPage() {
 
   const handleInspChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormInsp(prev => {
-      const updated = { ...prev, [name]: name === 'temperatura' ? Number(value) : value };
-      if (name === 'piezas_segunda' || name === 'piezas_rezaga' || name === 'total_muestras') {
-        const total = Number(name === 'total_muestras' ? value : prev.total_muestras || 1);
-        const pzSegunda = Number(name === 'piezas_segunda' ? value : prev.piezas_segunda || 0);
-        const pzRezaga = Number(name === 'piezas_rezaga' ? value : prev.piezas_rezaga || 0);
-        const totalDefectos = pzSegunda + pzRezaga;
-        updated.porcentaje_defecto = Number(((totalDefectos / (total || 1)) * 100).toFixed(2));
-      }
-      return updated;
+    setFormInsp(prev => ({
+      ...prev,
+      [name]: name === 'temperatura' || name === 'peso' ? Number(value) : value
+    }));
+  };
+
+  const agregarDefecto = () => {
+    const tipoFinal = nuevoDefecto.tipo === 'OTRO' ? nuevoDefecto.tipoPersonalizado.trim() : nuevoDefecto.tipo;
+    if (!tipoFinal || nuevoDefecto.piezas <= 0) return;
+
+    const defectoItem = {
+      tipo: tipoFinal,
+      clasificacion: nuevoDefecto.clasificacion,
+      piezas: Number(nuevoDefecto.piezas)
+    };
+
+    const nuevaLista = [...defectosLista, defectoItem];
+    setDefectosLista(nuevaLista);
+
+    const { pGeneral, pPrimera, pSegunda, pRezaga } = recalcularPorcentajes(formInsp.total_muestras, nuevaLista);
+    setFormInsp(prev => ({
+      ...prev,
+      porcentaje_general: pGeneral,
+      porcentaje_primera: pPrimera,
+      porcentaje_segunda: pSegunda,
+      porcentaje_rezaga: pRezaga
+    }));
+
+    setNuevoDefecto({
+      clasificacion: 'Segunda',
+      tipo: DEFECTOS_POR_CLASIFICACION['Segunda'][0],
+      tipoPersonalizado: '',
+      piezas: 1
     });
+  };
+
+  const eliminarDefecto = (index: number) => {
+    const nuevaLista = defectosLista.filter((_, i) => i !== index);
+    setDefectosLista(nuevaLista);
+
+    const { pGeneral, pPrimera, pSegunda, pRezaga } = recalcularPorcentajes(formInsp.total_muestras, nuevaLista);
+    setFormInsp(prev => ({
+      ...prev,
+      porcentaje_general: pGeneral,
+      porcentaje_primera: pPrimera,
+      porcentaje_segunda: pSegunda,
+      porcentaje_rezaga: pRezaga
+    }));
   };
 
   const handleSubmitInsp = async (e: React.FormEvent) => {
     e.preventDefault();
     const cuadroFinal = `${formInsp.etapaSeleccionada} (Cuadro: ${formInsp.cuadroSeleccionado})`;
-    const totalDefectosPz = Number(formInsp.piezas_segunda) + Number(formInsp.piezas_rezaga);
+    const totalDefectosPz = defectosLista.reduce((acc, curr) => acc + curr.piezas, 0);
 
     const resumenTamanos = Object.entries(tamanosPz)
       .filter(([, pz]) => pz > 0)
       .map(([tam, pz]) => `${tam}: ${pz} pz`)
       .join(' | ');
 
+    const resumenDefectosText = defectosLista.length > 0
+      ? defectosLista.map(d => `${d.clasificacion}: ${d.tipo} (${d.piezas} pz)`).join(' | ')
+      : 'NINGUNO';
+
     const valorTempNum = Number(formInsp.temperatura) || 6.2;
+    const { pGeneral, pPrimera, pSegunda, pRezaga, pDefectoTotal } = recalcularPorcentajes(formInsp.total_muestras, defectosLista);
+
+    const tipoBolsaFinal = formInsp.tipo_bolsa_opcion === 'Variado'
+      ? `Variado: ${formInsp.tipo_bolsa_detalle.trim() || 'No especificado'}`
+      : formInsp.tipo_bolsa_opcion;
 
     const payload = {
       ...formInsp,
+      tipo_bolsa: tipoBolsaFinal,
       temperatura: valorTempNum,
       temperatura_c: valorTempNum,
       temp: valorTempNum,
       cuadro: cuadroFinal,
       piezas_defecto: totalDefectosPz,
       tamano_resumen: resumenTamanos || `Muestra: ${formInsp.total_muestras} pz`,
-      defecto: `2ª: ${formInsp.defecto_segunda} (${formInsp.piezas_segunda} pz) | Rezaga: ${formInsp.defecto_rezaga} (${formInsp.piezas_rezaga} pz)`,
-      categoria_defecto: formInsp.piezas_rezaga > 0 ? 'Rezaga' : 'Segunda'
+      defecto: resumenDefectosText,
+      categoria_defecto: defectosLista.some(d => d.clasificacion === 'Rezaga') ? 'Rezaga' : 'Segunda',
+      desglose_defectos: defectosLista,
+      porcentaje_general: pGeneral,
+      porcentaje_primera: pPrimera,
+      porcentaje_segunda: pSegunda,
+      porcentaje_rezaga: pRezaga,
+      porcentaje_defecto: pDefectoTotal,
+      calidad: formInsp.calidad_global,
+      calidad_global: formInsp.calidad_global
     };
 
     try {
@@ -371,18 +453,20 @@ export default function AdminPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
+      
       const data = await res.json();
 
-      if (res.ok && (data.success || modoEdicionInsp)) {
+      if (res.ok && data.success) {
         mostrarAlerta(modoEdicionInsp ? '¡Registro actualizado con éxito!' : '¡Inspección agregada con éxito!', 'exito');
         setModalInspAbierto(false);
         setModoEdicionInsp(false);
         fetchData();
       } else {
-        mostrarAlerta('Error al guardar la inspección.', 'error');
+        mostrarAlerta(`Error al guardar: ${data.error || 'Desconocido'}`, 'error');
       }
-    } catch {
-      mostrarAlerta('Error de conexión.', 'error');
+    } catch (err) {
+      console.error('Error de conexión:', err);
+      mostrarAlerta('Error de conexión con el servidor.', 'error');
     }
   };
 
@@ -433,22 +517,15 @@ export default function AdminPage() {
           mostrarAlerta('¡Temperaturas eliminadas correctamente!', 'exito');
           setModalMasivoAbierto(false);
           fetchData();
-        } else {
-          mostrarAlerta('Algunas temperaturas no pudieron ser eliminadas.', 'error');
         }
         return;
       }
 
       let idsAEliminar: number[] = [];
-
       if (tipoMasivo === 'fecha') {
-        idsAEliminar = inspecciones
-          .filter(i => i.fecha?.split('T')[0] === fechaBorrado)
-          .map(i => i.id);
+        idsAEliminar = inspecciones.filter(i => i.fecha?.split('T')[0] === fechaBorrado).map(i => i.id);
       } else {
-        idsAEliminar = inspecciones
-          .filter(i => String(i.inspector_id).trim() === String(inspectorBorrado).trim())
-          .map(i => i.id);
+        idsAEliminar = inspecciones.filter(i => String(i.inspector_id).trim() === String(inspectorBorrado).trim()).map(i => i.id);
       }
 
       if (idsAEliminar.length === 0) {
@@ -464,11 +541,9 @@ export default function AdminPage() {
       }
 
       if (eliminadosOk) {
-        mostrarAlerta('¡Registros eliminados correctamente de la base de datos!', 'exito');
+        mostrarAlerta('¡Registros eliminados correctamente!', 'exito');
         setModalMasivoAbierto(false);
         fetchData();
-      } else {
-        mostrarAlerta('Algunos registros no pudieron ser eliminados.', 'error');
       }
     } catch (err) {
       console.error(err);
@@ -487,40 +562,20 @@ export default function AdminPage() {
       cuadroDetectado = partes[1] ? partes[1].replace(')', '').trim() : cuadroDetectado;
     }
 
-    let defecto2da = 'NINGUNO';
-    let pz2da = item.piezas_defecto || 0;
-    let defectoRez = 'NINGUNO';
-    let pzRez = 0;
+    const tempExtraida = item.temperatura ?? item.temperatura_c ?? item.temp ?? 6.2;
 
-    if (item.defecto && item.defecto.includes('2ª:')) {
-      const partesDef = item.defecto.split('|');
-      partesDef.forEach(parte => {
-        if (parte.includes('2ª:')) {
-          const match = parte.match(/2ª:\s*(.*?)\s*\((.*?)\s*pz\)/);
-          if (match) {
-            defecto2da = match[1].trim();
-            pz2da = Number(match[2]);
-          }
-        }
-        if (parte.includes('Rezaga:')) {
-          const match = parte.match(/Rezaga:\s*(.*?)\s*\((.*?)\s*pz\)/);
-          if (match) {
-            defectoRez = match[1].trim();
-            pzRez = Number(match[2]);
-          }
-        }
-      });
-    } else {
-      if (item.categoria_defecto === 'Rezaga') {
-        defectoRez = item.defecto || 'NINGUNO';
-        pzRez = item.piezas_defecto || 0;
+    let bolsaOpcion = 'Sin Bolsa (S/B)';
+    let bolsaDetalle = '';
+    if (item.tipo_bolsa) {
+      if (item.tipo_bolsa.startsWith('Variado:')) {
+        bolsaOpcion = 'Variado';
+        bolsaDetalle = item.tipo_bolsa.replace('Variado:', '').trim();
+      } else if (item.tipo_bolsa.includes('Con Bolsa') || item.tipo_bolsa.includes('C/B')) {
+        bolsaOpcion = 'Con Bolsa (C/B)';
       } else {
-        defecto2da = item.defecto || 'NINGUNO';
-        pz2da = item.piezas_defecto || 0;
+        bolsaOpcion = 'Sin Bolsa (S/B)';
       }
     }
-
-    const tempExtraida = item.temperatura ?? item.temperatura_c ?? item.temp ?? 6.2;
 
     setFormInsp({
       fecha: item.fecha?.split('T')[0] || '',
@@ -532,17 +587,18 @@ export default function AdminPage() {
       etapaSeleccionada: etapaDetectada,
       cuadroSeleccionado: cuadroDetectado,
       empaque: item.empaque || config.empaques[0],
+      tipo_bolsa_opcion: bolsaOpcion,
+      tipo_bolsa_detalle: bolsaDetalle,
       con_etiqueta: item.con_etiqueta ?? true,
       temperatura: Number(tempExtraida),
       peso: item.peso || 22.87,
       peso_unidad: item.peso_unidad || 'lb',
-      calidad: item.calidad || 'Primera',
-      defecto_segunda: defecto2da,
-      piezas_segunda: pz2da,
-      defecto_rezaga: defectoRez,
-      piezas_rezaga: pzRez,
+      calidad_global: item.calidad_global || item.calidad || 'Primera (Limpia)',
       total_muestras: item.total_muestras || 0,
-      porcentaje_defecto: item.porcentaje_defecto || 0,
+      porcentaje_general: item.porcentaje_general ?? 100,
+      porcentaje_primera: item.porcentaje_primera ?? 0,
+      porcentaje_segunda: item.porcentaje_segunda ?? 0,
+      porcentaje_rezaga: item.porcentaje_rezaga ?? 0,
       empacador_num: item.empacador_num || 5,
       empacador_nombre: item.empacador_nombre || CAT_EMPACADORES[item.empacador_num || 5]
     });
@@ -563,6 +619,27 @@ export default function AdminPage() {
       });
     }
     setTamanosPz(nuevoTamanosObj);
+
+    if (item.desglose_defectos && Array.isArray(item.desglose_defectos) && item.desglose_defectos.length > 0) {
+      setDefectosLista(item.desglose_defectos);
+    } else if (item.defecto && item.defecto !== 'NINGUNO' && item.defecto !== 'Ninguno') {
+      const listaRecuperada: Array<{ tipo: string; clasificacion: string; piezas: number }> = [];
+      const partes = item.defecto.split('|');
+      partes.forEach(parte => {
+        const match = parte.match(/(Primera|Segunda|Rezaga):\s*(.*?)\s*\((.*?)\s*pz\)/i);
+        if (match) {
+          const clasif = match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase();
+          const nomDef = match[2].trim();
+          const pzNum = Number(match[3]) || 1;
+          if (nomDef !== 'NINGUNO') {
+            listaRecuperada.push({ clasificacion: clasif, tipo: nomDef, piezas: pzNum });
+          }
+        }
+      });
+      setDefectosLista(listaRecuperada);
+    } else {
+      setDefectosLista([]);
+    }
 
     setIdInspEditando(item.id);
     setModoEdicionInsp(true);
@@ -587,67 +664,75 @@ export default function AdminPage() {
     const desgloseMap: Record<string, { tipo: string; piezas: number }> = {};
     
     filtradas.forEach(f => {
-      if (f.defecto && f.defecto.includes('2ª:')) {
-        const partes = f.defecto.split('|');
-        partes.forEach(p => {
-          if (p.includes('2ª:')) {
-            const m = p.match(/2ª:\s*(.*?)\s*\((.*?)\s*pz\)/);
-            if (m && m[1].trim() !== 'NINGUNO' && Number(m[2]) > 0) {
-              const nombre = m[1].trim();
-              const pz = Number(m[2]);
-              if (!desgloseMap[nombre]) desgloseMap[nombre] = { tipo: 'SEGUNDA', piezas: 0 };
-              desgloseMap[nombre].piezas += pz;
-            }
-          }
-          if (p.includes('Rezaga:')) {
-            const m = p.match(/Rezaga:\s*(.*?)\s*\((.*?)\s*pz\)/);
-            if (m && m[1].trim() !== 'NINGUNO' && Number(m[2]) > 0) {
-              const nombre = m[1].trim();
-              const pz = Number(m[2]);
-              if (!desgloseMap[nombre]) desgloseMap[nombre] = { tipo: 'REZAGA', piezas: 0 };
-              desgloseMap[nombre].piezas += pz;
+      if (f.defecto && f.defecto !== 'NINGUNO' && f.defecto !== 'Ninguno') {
+        const fragmentos = f.defecto.split('|');
+        fragmentos.forEach(frag => {
+          const match = frag.match(/(Primera|Segunda|Rezaga):\s*(.*?)\s*\((.*?)\s*pz\)/i);
+          if (match) {
+            const clasif = match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase();
+            const nombre = match[2].trim();
+            const pz = Number(match[3]) || 0;
+            if (nombre !== 'NINGUNO' && pz > 0) {
+              const key = `${nombre} (${clasif})`;
+              if (!desgloseMap[key]) desgloseMap[key] = { tipo: clasif, piezas: 0 };
+              desgloseMap[key].piezas += pz;
             }
           }
         });
       }
     });
 
-    const desglose = Object.keys(desgloseMap).map(nombre => {
-      const pz = desgloseMap[nombre].piezas;
+    const desglose = Object.keys(desgloseMap).map(key => {
+      const pz = desgloseMap[key].piezas;
       const pct = Number(((pz / totalMuestras) * 100).toFixed(1));
-      return { nombre, tipo: desgloseMap[nombre].tipo, porcentaje: pct, piezas: pz };
+      return { nombre: key, tipo: desgloseMap[key].tipo, porcentaje: pct, piezas: pz };
     });
 
     const totalDefectosPz = desglose.reduce((acc, curr) => acc + curr.piezas, 0);
     const pctDefectosTotales = Number(((totalDefectosPz / totalMuestras) * 100).toFixed(2));
     const pctBuenaCalidad = Number((100 - pctDefectosTotales).toFixed(2));
-    const pctCalidad = Number(desglose.filter(d => d.tipo === 'SEGUNDA').reduce((a, c) => a + c.porcentaje, 0).toFixed(2));
-    const pctCondicion = Number(desglose.filter(d => d.tipo === 'REZAGA').reduce((a, c) => a + c.porcentaje, 0).toFixed(2));
     
     const tempPromedio = Number(filtradas[0]?.temperatura ?? filtradas[0]?.temperatura_c ?? filtradas[0]?.temp ?? 6.2);
-
-    const inspectorObj = filtradas[0]?.nombre_inspector || 'Miriam León Ibarra';
+    const pesoPromedio = Number(filtradas[0]?.peso || 22.87);
+    const pesoUnidad = filtradas[0]?.peso_unidad || 'lb';
+    const tipoBolsa = filtradas[0]?.tipo_bolsa || 'Sin Bolsa (S/B)';
+    const inspectorObj = filtradas[0]?.nombre_inspector || 'Rubí';
 
     setDatosReporteImpresion({
       fecha: filtros.fecha,
       inspector: inspectorObj,
       producto: filtradas[0]?.producto || 'ZUCCHINI',
       empaque: filtradas[0]?.empaque || 'Rico Farms',
+      tipoBolsa,
+      peso: `${pesoPromedio} ${pesoUnidad}`,
       cuadro: filtradas[0]?.cuadro || 'Cuadro 5',
       totalMuestras,
       porcentajeBuenaCalidad: pctBuenaCalidad,
       porcentajeDefectosTotales: pctDefectosTotales,
-      porcentajeDefectoCalidad: pctCalidad,
-      porcentajeDefectoCondicion: pctCondicion,
       temperatura: tempPromedio,
-      statusBuenaCalidad: pctBuenaCalidad >= 90 ? 'ACEPTABLE' : pctBuenaCalidad >= 80 ? 'TOLERABLE' : 'CRÍTICA',
-      statusTemperatura: tempPromedio >= 5 && tempPromedio <= 10 ? 'ACEPTABLE' : tempPromedio <= 12 ? 'TOLERABLE' : 'CRÍTICA',
       desgloseDefectos: desglose
     });
 
     setModalReporteAbierto(false);
     setTimeout(() => { window.print(); }, 300);
   };
+
+  // Lógica de filtrado en la pestaña principal de Inspecciones
+  const inspeccionesFiltradas = inspecciones.filter(i => {
+    const fechaReg = i.fecha?.split('T')[0];
+    const matchFecha = soloHoy ? (fechaReg === fechaHoyStr) : (filtroFecha ? fechaReg === filtroFecha : true);
+    const matchInspector = filtroInspector === 'TODOS' || String(i.inspector_id).trim() === String(filtroInspector).trim();
+    const matchVariedad = filtroVariedad === 'TODAS' || i.producto === filtroVariedad || i.variedad === filtroVariedad;
+
+    return matchFecha && matchInspector && matchVariedad;
+  });
+
+  // Lógica exclusiva de la pestaña de Trabajadores / Empacadores
+  const trabajadoresFiltrados = Object.entries(CAT_EMPACADORES).filter(([id, nombre]) => {
+    if (!busquedaTrabajadorId.trim()) return true;
+    const termino = busquedaTrabajadorId.trim().toLowerCase();
+    return id.includes(termino) || nombre.toLowerCase().includes(termino);
+  });
 
   const configActual = CATALOGO_PRODUCTOS[formInsp.producto] || CATALOGO_PRODUCTOS["Zucchini"];
   const etapaActualObj = configActual.etapas.find(et => et.nombre === formInsp.etapaSeleccionada) || configActual.etapas[0];
@@ -658,6 +743,10 @@ export default function AdminPage() {
       
       <style jsx global>{`
         @media print {
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
           body { background: white !important; margin: 0 !important; padding: 0 !important; }
           .no-print { display: none !important; }
           .print-only { display: block !important; }
@@ -694,15 +783,19 @@ export default function AdminPage() {
             const ceros: Record<string, number> = {};
             listaTav.forEach(t => { ceros[t] = 0; });
             setTamanosPz(ceros);
+            setDefectosLista([]);
 
             setFormInsp(prev => ({
               ...prev,
               fecha: hoy.toISOString().split('T')[0],
               hora: hoy.toTimeString().split(' ')[0].substring(0, 5),
+              tipo_bolsa_opcion: 'Sin Bolsa (S/B)',
+              tipo_bolsa_detalle: '',
               total_muestras: 0,
-              piezas_segunda: 0,
-              piezas_rezaga: 0,
-              porcentaje_defecto: 0
+              porcentaje_general: 100,
+              porcentaje_primera: 0,
+              porcentaje_segunda: 0,
+              porcentaje_rezaga: 0
             }));
             setModoEdicionInsp(false); 
             setModalInspAbierto(true); 
@@ -750,8 +843,8 @@ export default function AdminPage() {
           <div className="flex items-center gap-2 bg-slate-50 p-3 rounded-xl border">
             <select value={inspectorBorrado} onChange={e => setInspectorBorrado(e.target.value)} className="border p-2 rounded-lg bg-white text-xs font-bold flex-1">
               <option value="001">Rubí (001)</option>
-              <option value="002">María (002)</option>
-              <option value="003">Marta Patricia (003)</option>
+              <option value="002">Martha (002)</option>
+              <option value="003">Mónica (003)</option>
             </select>
             <button onClick={() => {
               setTipoMasivo('inspector');
@@ -763,7 +856,7 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* PESTAÑAS */}
+      {/* PESTAÑAS (INSPECCIONES / TEMPERATURA / TRABAJADORES) */}
       <div className="no-print space-y-4">
         <div className="flex gap-2">
           <button onClick={() => setActiveTab('inspecciones')} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition cursor-pointer ${activeTab === 'inspecciones' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border'}`}>
@@ -772,15 +865,104 @@ export default function AdminPage() {
           <button onClick={() => setActiveTab('temperaturas')} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition cursor-pointer ${activeTab === 'temperaturas' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border'}`}>
             <Thermometer className="w-4 h-4" /> Temperatura ({temperaturas.length})
           </button>
+          <button onClick={() => setActiveTab('trabajadores')} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition cursor-pointer ${activeTab === 'trabajadores' ? 'bg-emerald-700 text-white shadow-sm' : 'bg-white text-slate-600 border'}`}>
+            <Users className="w-4 h-4" /> Trabajadores / Empacadores (19)
+          </button>
         </div>
+
+        {/* BUSCADOR INTELIGENTE (PESTAÑA INSPECCIONES) */}
+        {activeTab === 'inspecciones' && (
+          <div className="bg-white p-4 rounded-2xl border shadow-sm space-y-3 mb-2 no-print">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="font-black text-xs text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                🔍 Buscador Inteligente y Filtros de Producción
+              </h3>
+              <button 
+                onClick={() => {
+                  setFiltroFecha(fechaHoyStr);
+                  setFiltroInspector('TODOS');
+                  setFiltroVariedad('TODAS');
+                  setSoloHoy(false);
+                }} 
+                className="text-[11px] text-emerald-600 hover:text-emerald-700 font-bold underline cursor-pointer"
+              >
+                Limpiar filtros
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-center">
+              <div>
+                <label className="text-[10px] text-slate-500 font-bold block mb-1">Fecha</label>
+                <input 
+                  type="date" 
+                  value={filtroFecha} 
+                  disabled={soloHoy}
+                  onChange={e => setFiltroFecha(e.target.value)} 
+                  className="w-full border p-2 rounded-xl bg-slate-50 text-xs font-bold" 
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] text-slate-500 font-bold block mb-1">Variedad / Producto</label>
+                <select 
+                  value={filtroVariedad} 
+                  onChange={e => setFiltroVariedad(e.target.value)} 
+                  className="w-full border p-2 rounded-xl bg-slate-50 text-xs font-bold"
+                >
+                  <option value="TODAS">Todas las variedades</option>
+                  {Array.from(new Set(inspecciones.map(i => i.producto))).map(prod => (
+                    <option key={prod} value={prod}>{prod}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-slate-500 font-bold block mb-1">Inspectora</label>
+                <select 
+                  value={filtroInspector} 
+                  onChange={e => setFiltroInspector(e.target.value)} 
+                  className="w-full border p-2 rounded-xl bg-slate-50 text-xs font-bold"
+                >
+                  <option value="TODOS">Todas las inspectoras</option>
+                  <option value="001">Rubí (001)</option>
+                  <option value="002">Martha (002)</option>
+                  <option value="003">Mónica (003)</option>
+                  <option value="100">Miriam (100 - Admin)</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col justify-end">
+                <button 
+                  onClick={() => setSoloHoy(!soloHoy)} 
+                  className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition cursor-pointer ${
+                    soloHoy ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  {soloHoy ? '📅 Mostrando solo Hoy' : '📅 Ver Solo de Hoy'}
+                </button>
+              </div>
+            </div>
+
+            <div className="text-[11px] text-slate-500 pt-1 flex justify-between items-center">
+              <span>Mostrando <strong className="text-slate-900">{inspeccionesFiltradas.length}</strong> registros coincidentes.</span>
+              {inspeccionesFiltradas.length === 0 && (
+                <span className="text-amber-600 font-bold">⚠️ No hay registros para estos criterios.</span>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="bg-white p-6 rounded-2xl shadow-sm border space-y-6">
           <div className="flex justify-between items-center border-b pb-4">
             <div className="flex items-center gap-3">
               <div className="bg-emerald-600 text-white font-black p-2.5 rounded-xl">RF</div>
               <div>
-                <h2 className="font-black text-sm text-slate-900 uppercase">Panel de Control Consolidado - Rico Farms</h2>
-                <p className="text-xs text-slate-500">Registros organizados por Inspectora y Variedad</p>
+                <h2 className="font-black text-sm text-slate-900 uppercase">
+                  {activeTab === 'inspecciones' ? 'Panel de Control Consolidado - Rico Farms' : activeTab === 'temperaturas' ? 'Historial de Temperatura Diario' : 'Búsqueda y Módulo de Empacadores por ID'}
+                </h2>
+                <p className="text-xs text-slate-500">
+                  {activeTab === 'trabajadores' ? 'Consulta individual de rendimiento y registros por número de empacador' : 'Registros organizados por Inspectora y Variedad'}
+                </p>
               </div>
             </div>
           </div>
@@ -790,9 +972,9 @@ export default function AdminPage() {
           ) : activeTab === 'inspecciones' ? (
             <div className="space-y-6">
               {['001', '002', '003', '100'].map(inspId => {
-                const registrosInsp = inspecciones.filter(i => String(i.inspector_id).trim() === inspId);
+                const registrosInsp = inspeccionesFiltradas.filter(i => String(i.inspector_id).trim() === inspId);
                 if (registrosInsp.length === 0) return null;
-                const nombreInsp = inspId === '001' ? 'Rubí (ID 001)' : inspId === '002' ? 'María (ID 002)' : inspId === '003' ? 'Marta Patricia (ID 003)' : 'Miriam (Admin 100)';
+                const nombreInsp = inspId === '001' ? 'Rubí (ID 001)' : inspId === '002' ? 'Martha (ID 002)' : inspId === '003' ? 'Mónica (ID 003)' : 'Miriam (Admin 100)';
 
                 const variedadesDeInsp = Array.from(new Set(registrosInsp.map(r => r.producto)));
 
@@ -819,9 +1001,8 @@ export default function AdminPage() {
                 );
               })}
             </div>
-          ) : (
+          ) : activeTab === 'temperaturas' ? (
             <div className="space-y-3">
-              <h3 className="font-bold text-xs text-slate-700 uppercase">Historial de Temperatura Diario</h3>
               <div className="overflow-x-auto border rounded-xl">
                 <table className="w-full text-[11px] text-left">
                   <thead className="bg-slate-100 text-slate-600 font-bold border-b">
@@ -853,6 +1034,83 @@ export default function AdminPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          ) : (
+            /* PESTAÑA DEDICADA: BUSCADOR Y MÓDULO DE TRABAJADORES POR ID */
+            <div className="space-y-6">
+              <div className="bg-slate-50 p-4 rounded-2xl border flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                  <div className="bg-emerald-600 text-white p-2 rounded-xl"><Search className="w-5 h-5" /></div>
+                  <div>
+                    <h3 className="font-black text-xs text-slate-800 uppercase">Búsqueda Rápida de Empacador</h3>
+                    <p className="text-[11px] text-slate-500">Escribe el número ID (1-19) o el nombre del trabajador</p>
+                  </div>
+                </div>
+
+                <div className="w-full sm:w-80 relative">
+                  <input 
+                    type="text" 
+                    placeholder="Buscar por ID (ej. 5) o Nombre..." 
+                    value={busquedaTrabajadorId}
+                    onChange={e => setBusquedaTrabajadorId(e.target.value)}
+                    className="w-full border-2 border-emerald-500/40 focus:border-emerald-600 p-2.5 rounded-xl text-xs font-bold bg-white outline-none shadow-sm"
+                  />
+                  {busquedaTrabajadorId && (
+                    <button 
+                      onClick={() => setBusquedaTrabajadorId('')}
+                      className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600 font-bold"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* LISTADO DE EMPACADORES CON SUS RESPECTIVAS INSPECCIONES */}
+              <div className="grid grid-cols-1 gap-4">
+                {trabajadoresFiltrados.map(([idNumStr, nombreEmpacador]) => {
+                  const empId = Number(idNumStr);
+                  const inspeccionesDelEmpacador = inspecciones.filter(i => Number(i.empacador_num) === empId);
+                  const totalPiezasMuestra = inspeccionesDelEmpacador.reduce((acc, curr) => acc + (Number(curr.total_muestras) || 0), 0);
+
+                  return (
+                    <div key={empId} className="border rounded-2xl p-4 bg-white shadow-sm space-y-3">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b pb-3 gap-2">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-emerald-700 text-white rounded-xl font-black flex items-center justify-center text-sm shadow-sm">
+                            #{empId}
+                          </div>
+                          <div>
+                            <h4 className="font-black text-xs text-slate-900 uppercase">{nombreEmpacador}</h4>
+                            <span className="text-[11px] text-slate-500 font-semibold">ID Oficial de Empaque: <strong>{empId}</strong></span>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2 text-[11px] font-bold">
+                          <span className="bg-slate-100 text-slate-700 px-3 py-1 rounded-lg border">
+                            <strong>{inspeccionesDelEmpacador.length}</strong> Inspecciones
+                          </span>
+                          <span className="bg-emerald-50 text-emerald-800 px-3 py-1 rounded-lg border border-emerald-200">
+                            <strong>{totalPiezasMuestra}</strong> Piezas Evaluadas
+                          </span>
+                        </div>
+                      </div>
+
+                      {inspeccionesDelEmpacador.length > 0 ? (
+                        <TablaInspecciones 
+                          registros={inspeccionesDelEmpacador} 
+                          abrirEdicionInsp={abrirEdicionInsp} 
+                          abrirModalEliminar={(tipo, id) => { setTipoEliminacion(tipo); setIdAEliminar(id); setModalEliminarAbierto(true); }} 
+                        />
+                      ) : (
+                        <div className="text-center py-4 text-xs text-slate-400 font-semibold italic bg-slate-50 rounded-xl">
+                          Sin inspecciones registradas para el empacador #{empId}.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -891,7 +1149,7 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* REPORTE IMPRESO PDF PROFESIONAL CON SEMÁFOROS COLORIDOS Y GRÁFICA DE PASTEL PERFECTAMENTE UBICADA Y GRANDE */}
+      {/* REPORTE IMPRESO */}
       {datosReporteImpresion && (
         <div className="print-only p-6 bg-white text-slate-900 font-sans max-w-4xl mx-auto space-y-4 text-xs">
           
@@ -909,46 +1167,47 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-2 text-center text-[10px] font-bold border rounded-xl overflow-hidden bg-slate-50">
+          <div className="grid grid-cols-5 gap-2 text-center text-[10px] font-bold border rounded-xl overflow-hidden bg-slate-50">
             <div className="border-r p-2">
-              <div className="bg-slate-900 text-white py-1 uppercase text-[9px]">PRODUCTOR</div>
+              <div className="bg-slate-900 text-white py-1 uppercase text-[8px]">PRODUCTOR</div>
               <div className="font-black text-slate-800 mt-1">AGRICOLA SONORG SA DE CV</div>
             </div>
             <div className="border-r p-2">
-              <div className="bg-slate-900 text-white py-1 uppercase text-[9px]">PRODUCTO / EMPAQUE</div>
+              <div className="bg-slate-900 text-white py-1 uppercase text-[8px]">PRODUCTO / EMPAQUE</div>
               <div className="font-black text-slate-800 mt-1">{datosReporteImpresion.producto} ({datosReporteImpresion.empaque})</div>
             </div>
             <div className="border-r p-2">
-              <div className="bg-slate-900 text-white py-1 uppercase text-[9px]">CUADRO / PASO</div>
-              <div className="font-black text-slate-800 mt-1">{datosReporteImpresion.cuadro}</div>
+              <div className="bg-slate-900 text-white py-1 uppercase text-[8px]">TIPO DE EMPAQUE</div>
+              <div className="font-black text-slate-800 mt-1">{datosReporteImpresion.tipoBolsa}</div>
+            </div>
+            <div className="border-r p-2">
+              <div className="bg-slate-900 text-white py-1 uppercase text-[8px]">PESO CAJA</div>
+              <div className="font-black text-cyan-800 mt-1">{datosReporteImpresion.peso}</div>
             </div>
             <div className="p-2">
-              <div className="bg-slate-900 text-white py-1 uppercase text-[9px]">INSPECTOR</div>
+              <div className="bg-slate-900 text-white py-1 uppercase text-[8px]">INSPECTOR</div>
               <div className="font-black text-slate-800 mt-1">{datosReporteImpresion.inspector}</div>
             </div>
           </div>
 
-          <div className="grid grid-cols-6 gap-2 text-center font-bold">
+          <div className="grid grid-cols-3 gap-2 text-center font-bold">
             <div className="border rounded-xl p-2 bg-slate-50"><div className="text-[9px] text-slate-500">MUESTRA TOTAL</div><div className="text-sm font-black text-slate-900">{datosReporteImpresion.totalMuestras} PZ</div></div>
             <div className="border rounded-xl p-2 bg-emerald-50 text-emerald-900"><div className="text-[9px] text-emerald-700">% BUENA CALIDAD</div><div className="text-sm font-black">{datosReporteImpresion.porcentajeBuenaCalidad}%</div></div>
             <div className="border rounded-xl p-2 bg-red-50 text-red-900"><div className="text-[9px] text-red-700">% DEFECTOS</div><div className="text-sm font-black">{datosReporteImpresion.porcentajeDefectosTotales}%</div></div>
-            <div className="border rounded-xl p-2 bg-slate-50"><div className="text-[9px] text-slate-500">% CALIDAD</div><div className="text-sm font-black text-slate-800">{datosReporteImpresion.porcentajeDefectoCalidad}%</div></div>
-            <div className="border rounded-xl p-2 bg-slate-50"><div className="text-[9px] text-slate-500">% CONDICIÓN</div><div className="text-sm font-black text-slate-800">{datosReporteImpresion.porcentajeDefectoCondicion}%</div></div>
-            <div className="border rounded-xl p-2 bg-cyan-50 text-cyan-900"><div className="text-[9px] text-cyan-700">TEMP PROM.</div><div className="text-sm font-black">{datosReporteImpresion.temperatura}°C</div></div>
           </div>
 
-          {/* SEMÁFOROS EXACTOS A COLOR EN NÚMEROS Y RANGOS */}
-          <div className="border p-3 rounded-xl bg-slate-50 space-y-2">
-            <div className="flex flex-col sm:flex-row justify-between items-center text-[10px] font-bold gap-2">
-              <div className="flex items-center gap-1.5">
-                <span className="text-slate-800 uppercase font-black">SEMÁFORO DE CALIDAD</span>
-                <span className="bg-red-600 text-white px-2 py-0.5 rounded font-black text-[9px]">≤80%</span>
-                <span className="bg-amber-500 text-slate-900 px-2 py-0.5 rounded font-black text-[9px]">80 - 90%</span>
-                <span className="bg-emerald-600 text-white px-2 py-0.5 rounded font-black text-[9px]">≥90%</span>
+          {/* SEMÁFOROS */}
+          <div className="border p-3.5 rounded-xl bg-slate-50 space-y-3">
+            <div className="flex justify-between items-center text-[10px] font-bold border-b pb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-900 uppercase font-black">SEMÁFORO DE CALIDAD:</span>
+                <span className="bg-red-600 text-white px-2 py-0.5 rounded font-black text-[9px]">≤ 80%</span>
+                <span className="bg-amber-400 text-slate-900 px-2 py-0.5 rounded font-black text-[9px]">80 - 90%</span>
+                <span className="bg-emerald-500 text-white px-2 py-0.5 rounded font-black text-[9px]">≥ 90%</span>
               </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-slate-500">lote con {datosReporteImpresion.porcentajeBuenaCalidad}% de buena calidad:</span>
-                <span className={`px-3 py-0.5 rounded font-black text-white ${
+              <div className="flex items-center gap-2">
+                <span className="text-slate-600">este lote tiene <strong>{datosReporteImpresion.porcentajeBuenaCalidad}%</strong> de buena calidad:</span>
+                <span className={`px-3 py-1 rounded-lg font-black text-white text-[10px] tracking-wide uppercase ${
                   datosReporteImpresion.porcentajeBuenaCalidad >= 90 ? 'bg-emerald-600' : datosReporteImpresion.porcentajeBuenaCalidad >= 80 ? 'bg-amber-500' : 'bg-red-600'
                 }`}>
                   {datosReporteImpresion.porcentajeBuenaCalidad >= 90 ? 'ACEPTABLE' : datosReporteImpresion.porcentajeBuenaCalidad >= 80 ? 'TOLERABLE' : 'CRÍTICA'}
@@ -956,17 +1215,14 @@ export default function AdminPage() {
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row justify-between items-center text-[10px] font-bold gap-2 pt-2 border-t">
-              <div className="flex items-center gap-1.5">
-                <span className="text-slate-800 uppercase font-black">TEMPERATURA (°C) [GENERAL]</span>
-                <span className="bg-red-600 text-white px-2 py-0.5 rounded font-black text-[9px]">&lt;5°C</span>
-                <span className="bg-emerald-600 text-white px-2 py-0.5 rounded font-black text-[9px]">5 - 10°C</span>
-                <span className="bg-amber-500 text-slate-900 px-2 py-0.5 rounded font-black text-[9px]">10 - 12°C</span>
-                <span className="bg-red-600 text-white px-2 py-0.5 rounded font-black text-[9px]">&gt;12°C</span>
+            <div className="flex justify-between items-center text-[10px] font-bold">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-900 uppercase font-black">TEMPERATURA (°C):</span>
+                <span className="bg-emerald-500 text-white px-2 py-0.5 rounded font-black text-[9px]">5 - 10°C</span>
               </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-slate-500">promedio ( {datosReporteImpresion.temperatura}°C ) es:</span>
-                <span className={`px-3 py-0.5 rounded font-black text-white ${
+              <div className="flex items-center gap-2">
+                <span className="text-slate-600">capturada ( <strong>{datosReporteImpresion.temperatura} °C</strong> ) es:</span>
+                <span className={`px-3 py-1 rounded-lg font-black text-white text-[10px] tracking-wide uppercase ${
                   datosReporteImpresion.temperatura >= 5 && datosReporteImpresion.temperatura <= 10 ? 'bg-emerald-600' : datosReporteImpresion.temperatura <= 12 ? 'bg-amber-500' : 'bg-red-600'
                 }`}>
                   {datosReporteImpresion.temperatura >= 5 && datosReporteImpresion.temperatura <= 10 ? 'ACEPTABLE' : datosReporteImpresion.temperatura <= 12 ? 'TOLERABLE' : 'CRÍTICA'}
@@ -975,104 +1231,29 @@ export default function AdminPage() {
             </div>
           </div>
 
-          {/* GRÁFICA DE PASTEL GRANDE Y CON LEYENDA LATERAL COLORIDA */}
+          {/* GRÁFICA DE BARRAS */}
           <div className="border p-5 rounded-xl space-y-4 bg-white break-inside-avoid">
-            <h3 className="font-black text-slate-800 uppercase tracking-wider text-[11px]">GRÁFICA VISUAL DE DEFECTOS (DISTRIBUCIÓN)</h3>
-            
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-8 py-4">
-              <div className="relative w-48 h-48 shrink-0">
-                <svg viewBox="0 0 32 32" className="w-full h-full transform -rotate-90">
-                  {(() => {
-                    let acumulado = 0;
-                    const colores = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
-                    
-                    const itemsPastel = [
-                      { nombre: 'Buena Calidad', porcentaje: datosReporteImpresion.porcentajeBuenaCalidad },
-                      ...datosReporteImpresion.desgloseDefectos
-                    ];
+            <h3 className="font-black text-slate-900 uppercase tracking-wider text-[11px]">GRÁFICA DE DEFECTOS (ESCALA 0% A 100%)</h3>
+            <div className="space-y-2.5 pt-2">
+              {datosReporteImpresion.desgloseDefectos.length === 0 ? (
+                <div className="text-center py-4 text-emerald-700 font-bold">100% Buena Calidad - Sin Defectos Detectados</div>
+              ) : (
+                datosReporteImpresion.desgloseDefectos.map((def: any, idx: number) => {
+                  const colorBarra = def.tipo === 'Primera' ? 'bg-emerald-500' : def.tipo === 'Segunda' ? 'bg-amber-500' : 'bg-red-500';
+                  const anchoPorcentaje = Math.min(100, Math.max(2, def.porcentaje));
 
-                    return itemsPastel.map((item: any, i: number) => {
-                      const porc = Math.max(0.5, item.porcentaje || 0);
-                      if (porc <= 0) return null;
-                      const dashArray = `${porc} 100`;
-                      const dashOffset = -acumulado;
-                      acumulado += porc;
-                      const colorHex = colores[i % colores.length];
-
-                      return (
-                        <circle
-                          key={i}
-                          cx="16"
-                          cy="16"
-                          r="15.9155"
-                          fill="transparent"
-                          stroke={colorHex}
-                          strokeWidth="7"
-                          strokeDasharray={dashArray}
-                          strokeDashoffset={dashOffset}
-                        />
-                      );
-                    });
-                  })()}
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase">Defectos</span>
-                  <span className="text-sm font-black text-slate-900">{datosReporteImpresion.porcentajeDefectosTotales}%</span>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-2 flex-1 max-w-sm">
-                {(() => {
-                  const coloresClases = ['bg-emerald-500', 'bg-blue-500', 'bg-amber-500', 'bg-red-500', 'bg-purple-500', 'bg-pink-500', 'bg-teal-500'];
-                  const itemsLeyenda = [
-                    { nombre: 'Buena Calidad', porcentaje: datosReporteImpresion.porcentajeBuenaCalidad },
-                    ...datosReporteImpresion.desgloseDefectos
-                  ];
-
-                  return itemsLeyenda.map((item: any, i: number) => (
-                    <div key={i} className="flex items-center justify-between text-[11px] font-bold gap-3 bg-slate-50 p-2.5 rounded-xl border shadow-xs">
-                      <div className="flex items-center gap-2.5 truncate">
-                        <span className={`w-3.5 h-3.5 rounded-full shrink-0 ${coloresClases[i % coloresClases.length]}`}></span>
-                        <span className="text-slate-800 truncate uppercase">{item.nombre}</span>
+                  return (
+                    <div key={idx} className="flex items-center text-[10px] font-bold gap-3">
+                      <div className="w-44 text-right truncate text-slate-700 font-semibold" title={def.nombre}>{def.nombre}</div>
+                      <div className="flex-1 bg-slate-100 h-5 rounded-md overflow-hidden relative border border-slate-200">
+                        <div className={`h-full ${colorBarra} transition-all duration-300 rounded-r-md`} style={{ width: `${anchoPorcentaje}%` }}></div>
                       </div>
-                      <span className="font-black text-slate-900 shrink-0 bg-white px-2 py-0.5 rounded border">[{item.porcentaje}%]</span>
+                      <div className="w-12 text-left font-black text-slate-900 text-[11px]">{def.porcentaje}%</div>
                     </div>
-                  ));
-                })()}
-              </div>
+                  );
+                })
+              )}
             </div>
-          </div>
-
-          {/* DESGLOSE DETALLADO DE DEFECTOS */}
-          <div className="space-y-2 break-inside-avoid">
-            <h3 className="font-black text-slate-800 uppercase tracking-wider text-[11px]">DESGLOSE DETALLADO DE DEFECTOS</h3>
-            <table className="w-full text-[10px] border">
-              <thead className="bg-slate-900 text-white font-bold">
-                <tr>
-                  <th className="p-2 text-left">DEFECTO</th>
-                  <th className="p-2 text-center">TIPO DE CATEGORÍA</th>
-                  <th className="p-2 text-right">% IMPACTO ACUMULADO</th>
-                </tr>
-              </thead>
-              <tbody>
-                {datosReporteImpresion.desgloseDefectos.map((def: any, idx: number) => (
-                  <tr key={idx} className="border-b">
-                    <td className="p-2 font-bold text-slate-800">{def.nombre}</td>
-                    <td className="p-2 text-center text-slate-500 uppercase font-semibold">{def.tipo}</td>
-                    <td className="p-2 text-right font-black text-slate-900">{def.piezas} pz ({def.porcentaje}%)</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="bg-slate-900 text-white font-black">
-                  <td className="p-2">TOTAL DEFECTOS DETECTADOS</td>
-                  <td className="p-2 text-center uppercase font-bold text-[9px]">ACUMULADO TOTAL</td>
-                  <td className="p-2 text-right text-amber-400">
-                    {datosReporteImpresion.desgloseDefectos.reduce((acc: number, curr: any) => acc + Number(curr.piezas || 0), 0)} pz ({datosReporteImpresion.porcentajeDefectosTotales}%)
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
           </div>
 
         </div>
@@ -1109,8 +1290,8 @@ export default function AdminPage() {
                   <input type="number" step="0.1" name="temperatura" value={formInsp.temperatura} onChange={handleInspChange} required className="w-full border p-2.5 rounded-xl bg-cyan-50/60 font-black text-cyan-900" />
                 </div>
                 <div>
-                  <label className="text-slate-600 block mb-1">Categoría</label>
-                  <input type="text" disabled value={formInsp.categoria} className="w-full border p-2.5 rounded-xl bg-slate-100 text-emerald-700 font-bold" />
+                  <label className="text-slate-600 block mb-1">Peso ({formInsp.peso_unidad})</label>
+                  <input type="number" step="0.01" name="peso" value={formInsp.peso} onChange={handleInspChange} required className="w-full border p-2.5 rounded-xl bg-white font-bold" />
                 </div>
               </div>
 
@@ -1119,8 +1300,8 @@ export default function AdminPage() {
                   <label className="text-slate-600 block mb-1">Registrado por (Inspectora)</label>
                   <select value={formInsp.inspector_id} onChange={e => setFormInsp({...formInsp, inspector_id: e.target.value})} className="w-full border p-2.5 rounded-xl bg-white font-bold">
                     <option value="001">Rubí (001)</option>
-                    <option value="002">María (002)</option>
-                    <option value="003">Marta Patricia (003)</option>
+                    <option value="002">Martha (002)</option>
+                    <option value="003">Mónica (003)</option>
                     <option value="100">Miriam (100 - Admin)</option>
                   </select>
                 </div>
@@ -1134,11 +1315,36 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-emerald-50/50 p-3 rounded-xl border border-emerald-200">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-emerald-50/50 p-3 rounded-xl border border-emerald-200">
                 <div>
                   <span className="text-[10px] text-slate-500 block uppercase font-bold">Empacador Asignado:</span>
                   <span className="font-black text-emerald-700 text-xs">{formInsp.empacador_nombre}</span>
                 </div>
+                
+                <div className="space-y-1">
+                  <label className="text-slate-600 block mb-1 text-[11px] font-bold">Tipo de Empaque (Bolsa)</label>
+                  <select 
+                    name="tipo_bolsa_opcion" 
+                    value={formInsp.tipo_bolsa_opcion} 
+                    onChange={handleInspChange} 
+                    className="w-full border p-2 rounded-lg bg-white font-bold text-xs"
+                  >
+                    <option value="Con Bolsa (C/B)">Con Bolsa (C/B)</option>
+                    <option value="Sin Bolsa (S/B)">Sin Bolsa (S/B)</option>
+                    <option value="Variado">Variado (Especificar)</option>
+                  </select>
+                  {formInsp.tipo_bolsa_opcion === 'Variado' && (
+                    <input 
+                      type="text" 
+                      name="tipo_bolsa_detalle"
+                      placeholder="Ej. 10 con bolsa, 5 sin bolsa..." 
+                      value={formInsp.tipo_bolsa_detalle} 
+                      onChange={handleInspChange} 
+                      className="w-full border p-1.5 rounded-lg bg-amber-50 font-bold text-xs border-amber-300 mt-1" 
+                    />
+                  )}
+                </div>
+
                 <div>
                   <label className="text-slate-600 block mb-1 text-[11px]">¿Lleva Etiqueta?</label>
                   <select value={formInsp.con_etiqueta ? "true" : "false"} onChange={e => setFormInsp({...formInsp, con_etiqueta: e.target.value === "true"})} className="w-full border p-2 rounded-lg bg-white font-bold">
@@ -1166,7 +1372,7 @@ export default function AdminPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-slate-600 block mb-1">Empaque / Marca</label>
+                  <label className="text-slate-600 block mb-1">Tipo de Empaque</label>
                   <select value={formInsp.empaque} onChange={e => setFormInsp({...formInsp, empaque: e.target.value})} className="w-full border p-2.5 rounded-xl bg-white font-bold">
                     {configActual.empaques.map(emp => (
                       <option key={emp} value={emp}>{emp}</option>
@@ -1175,7 +1381,7 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-3 rounded-xl border">
                 <div>
                   <label className="text-slate-700 block mb-1 font-bold">Etapa</label>
                   <select value={formInsp.etapaSeleccionada} onChange={handleEtapaChange} className="w-full border p-2.5 rounded-xl bg-white font-bold">
@@ -1192,11 +1398,20 @@ export default function AdminPage() {
                     ))}
                   </select>
                 </div>
+                <div>
+                  <label className="text-slate-700 block mb-1 font-bold">Calidad Global</label>
+                  <select name="calidad_global" value={formInsp.calidad_global} onChange={handleInspChange} className="w-full border p-2.5 rounded-xl bg-white font-bold text-emerald-800">
+                    <option value="Primera (Limpia)">Primera (Limpia)</option>
+                    <option value="Primera con defectos menores">Primera con defectos menores</option>
+                    <option value="Segunda">Segunda</option>
+                    <option value="Rechazo">Rechazo</option>
+                  </select>
+                </div>
               </div>
 
               <div className="bg-slate-50 p-3 rounded-xl border space-y-2">
                 <div className="font-bold text-slate-800 flex items-center gap-1.5 text-[11px]">
-                  <Maximize2 className="w-3.5 h-3.5 text-emerald-600" /> Distribución de Tamaños / Calibres (PZ)
+                  <Maximize2 className="w-3.5 h-3.5 text-emerald-600" /> Desglose de Tamaños / Calibres (PZ)
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                   {tamanosDisponibles.map(tam => (
@@ -1214,56 +1429,119 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="text-slate-600 block mb-1">Total Muestras (PZ)</label>
-                  <input type="number" value={formInsp.total_muestras} readOnly className="w-full border p-2.5 rounded-xl bg-slate-100 font-black text-emerald-700 cursor-not-allowed" />
+              {/* SECCIÓN DE MÚLTIPLES DEFECTOS */}
+              <div className="bg-slate-50 p-4 rounded-xl border space-y-3">
+                <div className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
+                  <Layers className="w-3.5 h-3.5 text-emerald-600" /> Registro de Múltiples Defectos y Calidades
                 </div>
-                <div>
-                  <label className="text-slate-600 block mb-1">% Defecto Total</label>
-                  <input type="text" disabled value={`${formInsp.porcentaje_defecto}%`} className="w-full border p-2.5 rounded-xl bg-slate-100 font-black text-emerald-800 cursor-not-allowed" />
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
+                  <div>
+                    <label className="text-[10px] text-slate-500 block mb-1">Clasificación</label>
+                    <select 
+                      value={nuevoDefecto.clasificacion} 
+                      onChange={e => {
+                        const clas = e.target.value;
+                        const listaDef = DEFECTOS_POR_CLASIFICACION[clas] || DEFECTOS_POR_CLASIFICACION['Segunda'];
+                        setNuevoDefecto({
+                          clasificacion: clas,
+                          tipo: listaDef[0],
+                          tipoPersonalizado: '',
+                          piezas: 1
+                        });
+                      }} 
+                      className="w-full border p-2 rounded-lg bg-white font-bold text-xs"
+                    >
+                      <option value="Primera">Primera</option>
+                      <option value="Segunda">Segunda</option>
+                      <option value="Rezaga">Rezaga</option>
+                    </select>
+                  </div>
+                  
+                  <div className="sm:col-span-2 space-y-1">
+                    <label className="text-[10px] text-slate-500 block mb-1">Descripción / Defecto</label>
+                    <select 
+                      value={nuevoDefecto.tipo} 
+                      onChange={e => setNuevoDefecto(prev => ({ ...prev, tipo: e.target.value }))} 
+                      className="w-full border p-2 rounded-lg bg-white font-bold text-xs"
+                    >
+                      {(DEFECTOS_POR_CLASIFICACION[nuevoDefecto.clasificacion] || DEFECTOS_POR_CLASIFICACION['Segunda']).map(def => (
+                        <option key={def} value={def}>{def}</option>
+                      ))}
+                    </select>
+                    {nuevoDefecto.tipo === 'OTRO' && (
+                      <input 
+                        type="text" 
+                        placeholder="Escribe el defecto personalizado..." 
+                        value={nuevoDefecto.tipoPersonalizado} 
+                        onChange={e => setNuevoDefecto(prev => ({ ...prev, tipoPersonalizado: e.target.value }))} 
+                        className="w-full border p-1.5 rounded-lg bg-white text-xs font-bold mt-1 border-emerald-500" 
+                      />
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-slate-500 block mb-1">Piezas (PZ)</label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="number" 
+                        min="1" 
+                        value={nuevoDefecto.piezas} 
+                        onChange={e => setNuevoDefecto(prev => ({ ...prev, piezas: Math.max(1, Number(e.target.value)) }))} 
+                        className="w-full border p-2 rounded-lg font-black text-xs text-center" 
+                      />
+                      <button type="button" onClick={agregarDefecto} className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg font-bold text-xs cursor-pointer">
+                        <PlusCircle className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="text-slate-600 block mb-1">Calidad Global</label>
-                  <select name="calidad" value={formInsp.calidad} onChange={handleInspChange} className="w-full border p-2.5 rounded-xl bg-white font-bold">
-                    <option value="Primera">Primera</option>
-                    <option value="Segunda">Segunda</option>
-                    <option value="Rechazo">Rechazo</option>
-                  </select>
-                </div>
+
+                {defectosLista.length > 0 && (
+                  <div className="space-y-1.5 pt-2">
+                    {defectosLista.map((def, idx) => (
+                      <div key={idx} className="flex justify-between items-center bg-white p-2 rounded-lg border text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${
+                            def.clasificacion === 'Primera' ? 'bg-emerald-100 text-emerald-800' : 
+                            def.clasificacion === 'Segunda' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'
+                          }`}>
+                            {def.clasificacion}
+                          </span>
+                          <span className="font-bold text-slate-800">{def.tipo}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="font-black text-slate-700">{def.piezas} pz</span>
+                          <button type="button" onClick={() => eliminarDefecto(idx)} className="text-red-500 hover:text-red-700 cursor-pointer">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border">
-                <div className="bg-white p-3 rounded-xl border border-amber-200 space-y-2">
-                  <div className="font-bold text-amber-800 flex items-center gap-1 text-[11px]">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" /> Defectos de 2da Calidad
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-slate-500 block mb-1">Tipo de Daño</label>
-                    <select value={formInsp.defecto_segunda} onChange={e => setFormInsp({...formInsp, defecto_segunda: e.target.value})} className="w-full border p-2 rounded-lg bg-slate-50 font-bold">
-                      {DEFECTOS_SEGUNDA.map(def => <option key={def} value={def}>{def}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-slate-500 block mb-1">Piezas (PZ)</label>
-                    <input type="number" min="0" name="piezas_segunda" value={formInsp.piezas_segunda} onChange={handleInspChange} className="w-full border p-2 rounded-lg font-black text-amber-700" />
-                  </div>
+              {/* DESGLOSE PORCENTUAL */}
+              <div className="grid grid-cols-5 gap-2 bg-slate-50 p-3 rounded-xl border text-center">
+                <div>
+                  <label className="text-slate-500 block mb-1 text-[10px] font-bold">Total Muestras</label>
+                  <input type="number" value={formInsp.total_muestras} readOnly className="w-full border p-2 rounded-xl bg-slate-100 font-black text-slate-800 text-xs text-center cursor-not-allowed" />
                 </div>
-
-                <div className="bg-white p-3 rounded-xl border border-red-200 space-y-2">
-                  <div className="font-bold text-red-800 flex items-center gap-1 text-[11px]">
-                    <Layers className="w-3.5 h-3.5 text-red-600" /> Defectos de Rezaga
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-slate-500 block mb-1">Tipo de Daño</label>
-                    <select value={formInsp.defecto_rezaga} onChange={e => setFormInsp({...formInsp, defecto_rezaga: e.target.value})} className="w-full border p-2 rounded-lg bg-slate-50 font-bold">
-                      {DEFECTOS_REZAGA.map(def => <option key={def} value={def}>{def}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-slate-500 block mb-1">Piezas (PZ)</label>
-                    <input type="number" min="0" name="piezas_rezaga" value={formInsp.piezas_rezaga} onChange={handleInspChange} className="w-full border p-2 rounded-lg font-black text-red-700" />
-                  </div>
+                <div>
+                  <label className="text-cyan-700 block mb-1 text-[10px] font-bold">% General</label>
+                  <input type="text" disabled value={`${formInsp.porcentaje_general}%`} className="w-full border p-2 rounded-xl bg-cyan-50 font-black text-cyan-900 text-xs text-center cursor-not-allowed" />
+                </div>
+                <div>
+                  <label className="text-emerald-700 block mb-1 text-[10px] font-bold">% Primera</label>
+                  <input type="text" disabled value={`${formInsp.porcentaje_primera}%`} className="w-full border p-2 rounded-xl bg-emerald-50 font-black text-emerald-800 text-xs text-center cursor-not-allowed" />
+                </div>
+                <div>
+                  <label className="text-amber-700 block mb-1 text-[10px] font-bold">% Segunda</label>
+                  <input type="text" disabled value={`${formInsp.porcentaje_segunda}%`} className="w-full border p-2 rounded-xl bg-amber-50 font-black text-amber-800 text-xs text-center cursor-not-allowed" />
+                </div>
+                <div>
+                  <label className="text-red-700 block mb-1 text-[10px] font-bold">% Rezaga</label>
+                  <input type="text" disabled value={`${formInsp.porcentaje_rezaga}%`} className="w-full border p-2 rounded-xl bg-red-50 font-black text-red-800 text-xs text-center cursor-not-allowed" />
                 </div>
               </div>
 
@@ -1288,42 +1566,55 @@ function TablaInspecciones({ registros, abrirEdicionInsp, abrirModalEliminar }: 
           <tr>
             <th className="p-2">ID</th>
             <th className="p-2">Fecha / Hora</th>
-            <th className="p-2">Temp (°C)</th>
+            <th className="p-2">Temp / Peso</th>
             <th className="p-2">Empacador</th>
             <th className="p-2">Producto / Variedad</th>
             <th className="p-2">Cuadro / Etapa</th>
-            <th className="p-2">Tamaños (PZ)</th>
+            <th className="p-2">Calidad Global</th>
+            <th className="p-2">Desglose de Tamaños</th>
             <th className="p-2">Daños Registrados</th>
-            <th className="p-2">% Defecto</th>
-            <th className="p-2">Calidad</th>
+            <th className="p-2">% Gen / 1ª / 2ª / Rez</th>
             <th className="p-2 text-center">Acciones</th>
           </tr>
         </thead>
         <tbody>
           {registros.map(insp => {
-            // LECTURA ROBUSTA DE LA TEMPERATURA REAL GUARDADA EN LA BASE DE DATOS
             const tempExtraida = insp.temperatura ?? insp.temperatura_c ?? insp.temp;
             const tempValida = (tempExtraida !== undefined && tempExtraida !== null && tempExtraida !== '' && !isNaN(Number(tempExtraida))) 
               ? `${Number(tempExtraida).toFixed(1)} °C` 
               : 'N/D';
 
+            const pGen = insp.porcentaje_general !== undefined ? insp.porcentaje_general : 100;
+            const p1 = insp.porcentaje_primera !== undefined ? insp.porcentaje_primera : 0;
+            const p2 = insp.porcentaje_segunda !== undefined ? insp.porcentaje_segunda : 0;
+            const pRez = insp.porcentaje_rezaga !== undefined ? insp.porcentaje_rezaga : 0;
+            const calidadMostrar = insp.calidad_global || insp.calidad || 'Primera (Limpia)';
+            const bolsaMostrar = insp.tipo_bolsa || 'S/B';
+
             return (
               <tr key={insp.id} className="border-b bg-white hover:bg-slate-50">
                 <td className="p-2 font-bold">#{insp.id}</td>
                 <td className="p-2">{insp.fecha?.split('T')[0]} ({insp.hora})</td>
-                <td className="p-2 font-black text-cyan-700">{tempValida}</td>
-                <td className="p-2 font-bold text-emerald-700">#{insp.empacador_num} <span className="text-[10px] text-slate-500 font-normal">({insp.empacador_nombre})</span></td>
-                <td className="p-2 font-medium">{insp.producto} <span className="text-slate-400 text-[10px]">({insp.variedad})</span></td>
-                <td className="p-2">{insp.cuadro}</td>
-                <td className="p-2 font-bold text-slate-700">
-                  <div className="text-slate-900 font-black">
-                    {insp.tamano_resumen && insp.tamano_resumen !== 'Sin desglose' && insp.tamano_resumen !== 'N/D' ? insp.tamano_resumen : `Total: ${insp.total_muestras} pz`}
-                  </div>
-                </td>
-                <td className="p-2 text-slate-700">{insp.defecto}</td>
-                <td className="p-2 text-red-600 font-bold">{insp.porcentaje_defecto}%</td>
                 <td className="p-2">
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${insp.calidad === 'Primera' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{insp.calidad}</span>
+                  <span className="font-black text-cyan-700 block">{tempValida}</span>
+                  <span className="font-semibold text-slate-600 text-[10px]">{insp.peso ?? 0} {insp.peso_unidad || 'lb'}</span>
+                </td>
+                <td className="p-2 font-bold text-emerald-700">#{insp.empacador_num}</td>
+                <td className="p-2 font-medium">
+                  {insp.producto} <span className="text-slate-400 text-[10px]">({insp.variedad})</span>
+                  <span className="text-emerald-700 block text-[10px] font-bold">{bolsaMostrar}</span>
+                </td>
+                <td className="p-2">{insp.cuadro}</td>
+                <td className="p-2 font-bold text-emerald-800">{calidadMostrar}</td>
+                <td className="p-2 font-black text-slate-800">
+                  {insp.tamano_resumen && insp.tamano_resumen !== 'Sin desglose' && insp.tamano_resumen !== 'N/D' ? insp.tamano_resumen : `Total: ${insp.total_muestras} pz`}
+                </td>
+                <td className="p-2 text-slate-700 max-w-[180px] truncate" title={insp.defecto}>{insp.defecto}</td>
+                <td className="p-2 font-bold">
+                  <span className="text-cyan-800">{pGen}%</span> / {' '}
+                  <span className="text-emerald-700">{p1}%</span> / {' '}
+                  <span className="text-amber-700">{p2}%</span> / {' '}
+                  <span className="text-red-700">{pRez}%</span>
                 </td>
                 <td className="p-2 text-center flex justify-center gap-2">
                   <button onClick={() => abrirEdicionInsp(insp)} className="text-blue-500 hover:text-blue-700 cursor-pointer" title="Editar"><Edit3 className="w-4 h-4" /></button>
