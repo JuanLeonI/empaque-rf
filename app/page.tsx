@@ -53,8 +53,16 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-900 px-4">
       <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full space-y-6">
-        <div className="text-center space-y-1">
-          <div className="bg-emerald-600 text-white font-black inline-block p-3 rounded-2xl text-xl mb-2">RF</div>
+        
+        {/* LOGO DE RICO FARMS (REEMPLAZANDO EL CUADRO 'RF') */}
+        <div className="text-center space-y-2">
+          <div className="inline-block p-3 bg-emerald-50 rounded-2xl border border-emerald-100 shadow-sm mb-1">
+            <img 
+              src="/logo.png" 
+              alt="Logo Rico Farms" 
+              className="h-14 w-auto object-contain mx-auto"
+            />
+          </div>
           <h1 className="text-xl font-bold text-slate-900">Rico Farms — Control de Calidad</h1>
           <p className="text-xs text-slate-500">Inicia sesión con tu ID de empleado</p>
         </div>
@@ -67,7 +75,7 @@ export default function LoginPage() {
 
         <form onSubmit={handleLogin} className="space-y-4 text-xs font-semibold">
           <div>
-            <label className="text-slate-700 block mb-1 font-bold">ID de Empleado (001, 002, 003, 100)</label>
+            <label className="text-slate-700 block mb-1 font-bold">ID de Empleado (001, 002, 003, 004, 100)</label>
             <div className="relative">
               <User className="w-4 h-4 text-slate-500 absolute left-3 top-3.5 z-10" />
               <input 

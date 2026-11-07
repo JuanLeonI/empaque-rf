@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ClipboardList, LogOut, RefreshCcw, Thermometer, AlertTriangle, Layers, Maximize2, Plus, Trash2 } from 'lucide-react';
+import { ClipboardList, LogOut, RefreshCcw, Thermometer, Layers, Maximize2, Plus, Trash2 } from 'lucide-react';
 
 interface Inspeccion {
   id: number;
@@ -62,8 +62,40 @@ const CAT_EMPACADORES: Record<number, string> = {
 
 const DEFECTOS_POR_CLASIFICACION: Record<string, string[]> = {
   "Primera": ["NINGUNO", "BUENA CALIDAD", "LEVE MANCHA", "COLOR UNIFORME", "LACRADO", "GOLPE", "PITTING", "DAÑO X HOJA", "DEFORME", "OTRO"],
-  "Segunda": ["NINGUNO", "LACRADO #2", "COLOR BAJO CACHETEADO", "COLOR BAJO", "DEFORME", "DAÑO X PROTUBERANCIA", "GOLPE #2", "DAÑO X HOJA", "PITTING #2", "BAJO DIAMETRO", "BAJO COLOR", "FLOR EN FRUTA", "CURBO", "VIROSIS", "OTRO"],
-  "Rezaga": ["NINGUNO", "LACRADO (REZAGA)", "PITTING (REZAGA)", "AMARILLO CACHETEADO", "MALFORMACION", "DAÑO MECANICO", "DAÑO X PECIOLO", "DESHIDRATACION", "DEFORME", "PASADA", "CUCHILLO", "PUDRICION", "DAÑO X PLAGA", "OTRO"]
+  "Segunda": [
+    "NINGUNO",
+    "Lacrado segunda",
+    "Bajo color cacheteado",
+    "Deforme segunda",
+    "Protuberancia segunda",
+    "Daño por hoja segunda",
+    "Pitting segunda",
+    "Virisis segunda",
+    "Curvo segunda",
+    "Bajo diámetro",
+    "COLOR BAJO",
+    "FLOR EN FRUTA",
+    "OTRO"
+  ],
+  "Rezaga": [
+    "NINGUNO",
+    "Lacrado rezaga",
+    "Daño mecánico rezaga",
+    "Daño por peciolo rezaga",
+    "Pudrición",
+    "Deforme rezaga",
+    "Amarillo cacheteado",
+    "Cuchillo",
+    "Pitting",
+    "Protuberancia rezaga",
+    "Curvo rezaga",
+    "Virisis rezaga",
+    "MALFORMACION",
+    "DESHIDRATACION",
+    "PASADA",
+    "DAÑO X PLAGA",
+    "OTRO"
+  ]
 };
 
 const TAMAÑOS_POR_PRODUCTO: Record<string, string[]> = {
@@ -72,7 +104,12 @@ const TAMAÑOS_POR_PRODUCTO: Record<string, string[]> = {
   "Pepino": ["42", "36", "30", "24", "MENOR A 42"],
   "Sandía": ["AGUSTIN", "GRANEL", "STANDARD"],
   "Sandía Mini": ["MINI 5", "MINI 6", "MINI 8"],
-  "Berenjena": ["FANCY", "CHOICE", "JUMBO"]
+  "Berenjena": ["FANCY", "CHOICE", "JUMBO"],
+  "Butternut": ["LARGE", "MEDIUM", "SMALL"],
+  "Delicata": ["STANDARD", "LARGE"],
+  "Acorn": ["MEDIUM", "LARGE"],
+  "Spaghetti": ["MEDIUM", "LARGE"],
+  "Kabocha": ["MEDIUM", "LARGE"]
 };
 
 const CATALOGO_PRODUCTOS: Record<string, {
@@ -133,6 +170,36 @@ const CATALOGO_PRODUCTOS: Record<string, {
     etapas: [
       { nombre: "Etapa 1", cuadros: ["B-1", "B-2"] }
     ],
+    empaques: ["Rico Farms"]
+  },
+  "Butternut": {
+    categoria: "Duras",
+    variedades: ["Waltham", "Atlas"],
+    etapas: [{ nombre: "Etapa Única", cuadros: ["D-1", "D-2", "D-3"] }],
+    empaques: ["Rico Farms", "Sonoran Gold"]
+  },
+  "Delicata": {
+    categoria: "Duras",
+    variedades: ["Honey Boat", "Bush Delicata"],
+    etapas: [{ nombre: "Etapa Única", cuadros: ["D-4", "D-5"] }],
+    empaques: ["Rico Farms"]
+  },
+  "Acorn": {
+    categoria: "Duras",
+    variedades: ["Table Queen", "Honey Bear"],
+    etapas: [{ nombre: "Etapa Única", cuadros: ["A-1", "A-2"] }],
+    empaques: ["Rico Farms"]
+  },
+  "Spaghetti": {
+    categoria: "Duras",
+    variedades: ["Tivoli", "Vegetable Spaghetti"],
+    etapas: [{ nombre: "Etapa Única", cuadros: ["SP-1", "SP-2"] }],
+    empaques: ["Rico Farms"]
+  },
+  "Kabocha": {
+    categoria: "Duras",
+    variedades: ["Sunshine", "Sweet Mama"],
+    etapas: [{ nombre: "Etapa Única", cuadros: ["K-1", "K-2"] }],
     empaques: ["Rico Farms"]
   }
 };
@@ -444,7 +511,6 @@ export default function InspectorPage() {
 
     const valorTempNum = Number(formInsp.temperatura) || 0;
     
-    // FORMATO DE TIPO DE BOLSA (CON SOPORTE PARA VARIADO Y ESPECIFICACIÓN)
     const tipoBolsaFinal = formInsp.tipo_bolsa_opcion === 'Variado'
       ? `Variado: ${formInsp.tipo_bolsa_detalle.trim() || 'No especificado'}`
       : formInsp.tipo_bolsa_opcion;
@@ -521,10 +587,10 @@ export default function InspectorPage() {
         </div>
       )}
 
-      {/* CABECERA */}
+      {/* CABECERA INSPECTOR CON LOGO */}
       <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border">
         <div className="flex items-center gap-3">
-          <div className="bg-emerald-600 text-white p-3 rounded-xl"><ClipboardList className="w-6 h-6" /></div>
+          <img src="/logo.png" alt="Logo Rico Farms" className="h-11 w-auto object-contain rounded-lg" />
           <div>
             <h1 className="font-black text-base text-slate-900">Panel de Inspección — Rico Farms</h1>
             <p className="text-xs text-slate-500">Sesión activa: <span className="font-bold text-emerald-700">{nombreInspectoraActual}</span></p>
@@ -540,7 +606,6 @@ export default function InspectorPage() {
         </div>
       </div>
 
-      {/* FORMULARIO DE NUEVA INSPECCIÓN */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border space-y-4">
         <div className="flex justify-between items-center border-b pb-3">
           <h2 className="font-black text-sm text-slate-900 uppercase">NUEVA INSPECCIÓN DE CAMPO</h2>
@@ -601,7 +666,6 @@ export default function InspectorPage() {
               </div>
             </div>
 
-            {/* APARTADO DINÁMICO DE TIPO DE EMPAQUE (BOLSA) CON ESPECIFICACIÓN PARA "VARIADO" */}
             <div className="space-y-1">
               <label className="text-slate-600 block mb-1 text-xs font-bold">Tipo de Empaque (Bolsa)</label>
               <select 
@@ -705,7 +769,6 @@ export default function InspectorPage() {
             </div>
           )}
 
-          {/* SECCIÓN DE MÚLTIPLES DEFECTOS */}
           <div className="bg-slate-50 p-4 rounded-xl border space-y-3">
             <div className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
               <Layers className="w-3.5 h-3.5 text-emerald-600" /> Registro de Múltiples Defectos y Calidades
@@ -797,7 +860,6 @@ export default function InspectorPage() {
             )}
           </div>
 
-          {/* DESGLOSE PORCENTUAL */}
           <div className="grid grid-cols-5 gap-2 bg-slate-50 p-3 rounded-xl border text-center">
             <div>
               <label className="text-slate-500 block mb-1 text-[10px] font-bold">Total Muestras</label>
@@ -829,7 +891,6 @@ export default function InspectorPage() {
         </form>
       </div>
 
-      {/* TABLA DE MIS REGISTROS */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border space-y-4">
         <h3 className="font-black text-xs text-slate-800 uppercase tracking-wider">Mis Registros Guardados ({nombreInspectoraActual})</h3>
         

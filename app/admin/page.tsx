@@ -75,8 +75,40 @@ const CAT_EMPACADORES: Record<number, string> = {
 
 const DEFECTOS_POR_CLASIFICACION: Record<string, string[]> = {
   "Primera": ["NINGUNO", "BUENA CALIDAD", "LEVE MANCHA", "COLOR UNIFORME", "LACRADO", "GOLPE", "PITTING", "DAÑO X HOJA", "DEFORME", "OTRO"],
-  "Segunda": ["NINGUNO", "LACRADO #2", "COLOR BAJO CACHETEADO", "COLOR BAJO", "DEFORME", "DAÑO X PROTUBERANCIA", "GOLPE #2", "DAÑO X HOJA", "PITTING #2", "BAJO DIAMETRO", "BAJO COLOR", "FLOR EN FRUTA", "CURBO", "VIROSIS", "OTRO"],
-  "Rezaga": ["NINGUNO", "LACRADO (REZAGA)", "PITTING (REZAGA)", "AMARILLO CACHETEADO", "MALFORMACION", "DAÑO MECANICO", "DAÑO X PECIOLO", "DESHIDRATACION", "DEFORME", "PASADA", "CUCHILLO", "PUDRICION", "DAÑO X PLAGA", "OTRO"]
+  "Segunda": [
+    "NINGUNO",
+    "Lacrado segunda",
+    "Bajo color cacheteado",
+    "Deforme segunda",
+    "Protuberancia segunda",
+    "Daño por hoja segunda",
+    "Pitting segunda",
+    "Virisis segunda",
+    "Curvo segunda",
+    "Bajo diámetro",
+    "COLOR BAJO",
+    "FLOR EN FRUTA",
+    "OTRO"
+  ],
+  "Rezaga": [
+    "NINGUNO",
+    "Lacrado rezaga",
+    "Daño mecánico rezaga",
+    "Daño por peciolo rezaga",
+    "Pudrición",
+    "Deforme rezaga",
+    "Amarillo cacheteado",
+    "Cuchillo",
+    "Pitting",
+    "Protuberancia rezaga",
+    "Curvo rezaga",
+    "Virisis rezaga",
+    "MALFORMACION",
+    "DESHIDRATACION",
+    "PASADA",
+    "DAÑO X PLAGA",
+    "OTRO"
+  ]
 };
 
 const TAMAÑOS_POR_PRODUCTO: Record<string, string[]> = {
@@ -85,7 +117,12 @@ const TAMAÑOS_POR_PRODUCTO: Record<string, string[]> = {
   "Pepino": ["42", "36", "30", "24", "MENOR A 42"],
   "Sandía": ["AGUSTIN", "GRANEL", "STANDARD"],
   "Sandía Mini": ["MINI 5", "MINI 6", "MINI 8"],
-  "Berenjena": ["FANCY", "CHOICE", "JUMBO"]
+  "Berenjena": ["FANCY", "CHOICE", "JUMBO"],
+  "Butternut": ["LARGE", "MEDIUM", "SMALL"],
+  "Delicata": ["STANDARD", "LARGE"],
+  "Acorn": ["MEDIUM", "LARGE"],
+  "Spaghetti": ["MEDIUM", "LARGE"],
+  "Kabocha": ["MEDIUM", "LARGE"]
 };
 
 const CATALOGO_PRODUCTOS: Record<string, {
@@ -147,6 +184,36 @@ const CATALOGO_PRODUCTOS: Record<string, {
       { nombre: "Etapa 1", cuadros: ["B-1", "B-2"] }
     ],
     empaques: ["Rico Farms"]
+  },
+  "Butternut": {
+    categoria: "Duras",
+    variedades: ["Waltham", "Atlas"],
+    etapas: [{ nombre: "Etapa Única", cuadros: ["D-1", "D-2", "D-3"] }],
+    empaques: ["Rico Farms", "Sonoran Gold"]
+  },
+  "Delicata": {
+    categoria: "Duras",
+    variedades: ["Honey Boat", "Bush Delicata"],
+    etapas: [{ nombre: "Etapa Única", cuadros: ["D-4", "D-5"] }],
+    empaques: ["Rico Farms"]
+  },
+  "Acorn": {
+    categoria: "Duras",
+    variedades: ["Table Queen", "Honey Bear"],
+    etapas: [{ nombre: "Etapa Única", cuadros: ["A-1", "A-2"] }],
+    empaques: ["Rico Farms"]
+  },
+  "Spaghetti": {
+    categoria: "Duras",
+    variedades: ["Tivoli", "Vegetable Spaghetti"],
+    etapas: [{ nombre: "Etapa Única", cuadros: ["SP-1", "SP-2"] }],
+    empaques: ["Rico Farms"]
+  },
+  "Kabocha": {
+    categoria: "Duras",
+    variedades: ["Sunshine", "Sweet Mama"],
+    etapas: [{ nombre: "Etapa Única", cuadros: ["K-1", "K-2"] }],
+    empaques: ["Rico Farms"]
   }
 };
 
@@ -157,16 +224,13 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<'inspecciones' | 'temperaturas' | 'trabajadores'>('inspecciones');
   const [loading, setLoading] = useState(true);
 
-  // Estados seguros para evitar el error 'unstable value new Date()' en Next.js
   const [filtroFecha, setFiltroFecha] = useState('');
   const [filtroInspector, setFiltroInspector] = useState('TODOS');
   const [filtroVariedad, setFiltroVariedad] = useState('TODAS');
   const [soloHoy, setSoloHoy] = useState(false);
   const [fechaHoyStr, setFechaHoyStr] = useState('');
 
-  // Estado dedicado para el módulo de Búsqueda de Trabajadores
   const [busquedaTrabajadorId, setBusquedaTrabajadorId] = useState('');
-
   const [notificacion, setNotificacion] = useState<{ tipo: 'exito' | 'error'; mensaje: string } | null>(null);
 
   const mostrarAlerta = (mensaje: string, tipo: 'exito' | 'error' = 'exito') => {
@@ -717,7 +781,6 @@ export default function AdminPage() {
     setTimeout(() => { window.print(); }, 300);
   };
 
-  // Lógica de filtrado en la pestaña principal de Inspecciones
   const inspeccionesFiltradas = inspecciones.filter(i => {
     const fechaReg = i.fecha?.split('T')[0];
     const matchFecha = soloHoy ? (fechaReg === fechaHoyStr) : (filtroFecha ? fechaReg === filtroFecha : true);
@@ -727,7 +790,6 @@ export default function AdminPage() {
     return matchFecha && matchInspector && matchVariedad;
   });
 
-  // Lógica exclusiva de la pestaña de Trabajadores / Empacadores
   const trabajadoresFiltrados = Object.entries(CAT_EMPACADORES).filter(([id, nombre]) => {
     if (!busquedaTrabajadorId.trim()) return true;
     const termino = busquedaTrabajadorId.trim().toLowerCase();
@@ -767,10 +829,14 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* CABECERA ADMIN */}
+      {/* CABECERA ADMIN CON LOGO */}
       <div className="flex flex-col sm:flex-row justify-between items-center bg-white p-4 rounded-2xl shadow-sm border mb-6 gap-4 no-print">
         <div className="flex items-center gap-3">
-          <div className="bg-slate-900 text-white p-3 rounded-xl"><ShieldCheck className="w-6 h-6" /></div>
+          <img 
+            src="/logo.png" 
+            alt="Logo Rico Farms" 
+            className="h-12 w-auto object-contain rounded-lg"
+          />
           <div>
             <h1 className="font-black text-base text-slate-900">Panel de Administrador — Miriam León Ibarra (ID 100)</h1>
             <p className="text-xs text-slate-500">Supervisión, reportes por inspectora y variedad, edición y control total</p>
@@ -856,7 +922,7 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* PESTAÑAS (INSPECCIONES / TEMPERATURA / TRABAJADORES) */}
+      {/* PESTAÑAS */}
       <div className="no-print space-y-4">
         <div className="flex gap-2">
           <button onClick={() => setActiveTab('inspecciones')} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition cursor-pointer ${activeTab === 'inspecciones' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border'}`}>
@@ -870,7 +936,6 @@ export default function AdminPage() {
           </button>
         </div>
 
-        {/* BUSCADOR INTELIGENTE (PESTAÑA INSPECCIONES) */}
         {activeTab === 'inspecciones' && (
           <div className="bg-white p-4 rounded-2xl border shadow-sm space-y-3 mb-2 no-print">
             <div className="flex justify-between items-center border-b pb-2">
@@ -955,7 +1020,7 @@ export default function AdminPage() {
         <div className="bg-white p-6 rounded-2xl shadow-sm border space-y-6">
           <div className="flex justify-between items-center border-b pb-4">
             <div className="flex items-center gap-3">
-              <div className="bg-emerald-600 text-white font-black p-2.5 rounded-xl">RF</div>
+              <img src="/logo.png" alt="Logo" className="h-9 w-auto object-contain" />
               <div>
                 <h2 className="font-black text-sm text-slate-900 uppercase">
                   {activeTab === 'inspecciones' ? 'Panel de Control Consolidado - Rico Farms' : activeTab === 'temperaturas' ? 'Historial de Temperatura Diario' : 'Búsqueda y Módulo de Empacadores por ID'}
@@ -1037,7 +1102,6 @@ export default function AdminPage() {
               </div>
             </div>
           ) : (
-            /* PESTAÑA DEDICADA: BUSCADOR Y MÓDULO DE TRABAJADORES POR ID */
             <div className="space-y-6">
               <div className="bg-slate-50 p-4 rounded-2xl border flex flex-col sm:flex-row justify-between items-center gap-4">
                 <div className="flex items-center gap-2.5 w-full sm:w-auto">
@@ -1067,7 +1131,6 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* LISTADO DE EMPACADORES CON SUS RESPECTIVAS INSPECCIONES */}
               <div className="grid grid-cols-1 gap-4">
                 {trabajadoresFiltrados.map(([idNumStr, nombreEmpacador]) => {
                   const empId = Number(idNumStr);
@@ -1117,7 +1180,7 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* MODAL ELIMINAR INDIVIDUAL */}
+      {/* MODAL ELIMINAR */}
       {modalEliminarAbierto && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white p-6 rounded-2xl max-w-sm w-full shadow-2xl space-y-4 text-xs text-slate-800 text-center">
@@ -1149,13 +1212,13 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* REPORTE IMPRESO */}
+      {/* REPORTE IMPRESO CON LOGO */}
       {datosReporteImpresion && (
         <div className="print-only p-6 bg-white text-slate-900 font-sans max-w-4xl mx-auto space-y-4 text-xs">
           
           <div className="flex justify-between items-center border-b-2 border-slate-900 pb-3">
             <div className="flex items-center gap-3">
-              <div className="bg-emerald-700 text-white font-black px-3 py-2 rounded-xl text-sm">RF</div>
+              <img src="/logo.png" alt="Logo Rico Farms" className="h-10 w-auto object-contain" />
               <div>
                 <h1 className="font-black text-sm uppercase tracking-wider text-slate-900">INFORME DE CONTROL DE CALIDAD</h1>
                 <p className="text-[10px] text-slate-600 font-semibold">Empaque San Luis · Rico Farms</p>
@@ -1196,7 +1259,6 @@ export default function AdminPage() {
             <div className="border rounded-xl p-2 bg-red-50 text-red-900"><div className="text-[9px] text-red-700">% DEFECTOS</div><div className="text-sm font-black">{datosReporteImpresion.porcentajeDefectosTotales}%</div></div>
           </div>
 
-          {/* SEMÁFOROS */}
           <div className="border p-3.5 rounded-xl bg-slate-50 space-y-3">
             <div className="flex justify-between items-center text-[10px] font-bold border-b pb-2">
               <div className="flex items-center gap-2">
@@ -1231,7 +1293,6 @@ export default function AdminPage() {
             </div>
           </div>
 
-          {/* GRÁFICA DE BARRAS */}
           <div className="border p-5 rounded-xl space-y-4 bg-white break-inside-avoid">
             <h3 className="font-black text-slate-900 uppercase tracking-wider text-[11px]">GRÁFICA DE DEFECTOS (ESCALA 0% A 100%)</h3>
             <div className="space-y-2.5 pt-2">
@@ -1259,7 +1320,6 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* MODAL FILTROS REPORTE */}
       <ReporteModal 
         isOpen={modalReporteAbierto}
         onClose={() => setModalReporteAbierto(false)}
@@ -1267,7 +1327,7 @@ export default function AdminPage() {
         onGenerar={generarReporteFiltrado}
       />
 
-      {/* MODAL CREAR / EDITAR INSPECCIÓN (ADMIN) */}
+      {/* MODAL CREAR / EDITAR */}
       {modalInspAbierto && (
         <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white p-6 rounded-2xl max-w-3xl w-full shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto text-xs font-semibold">
@@ -1429,7 +1489,6 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* SECCIÓN DE MÚLTIPLES DEFECTOS */}
               <div className="bg-slate-50 p-4 rounded-xl border space-y-3">
                 <div className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
                   <Layers className="w-3.5 h-3.5 text-emerald-600" /> Registro de Múltiples Defectos y Calidades
@@ -1521,7 +1580,6 @@ export default function AdminPage() {
                 )}
               </div>
 
-              {/* DESGLOSE PORCENTUAL */}
               <div className="grid grid-cols-5 gap-2 bg-slate-50 p-3 rounded-xl border text-center">
                 <div>
                   <label className="text-slate-500 block mb-1 text-[10px] font-bold">Total Muestras</label>
